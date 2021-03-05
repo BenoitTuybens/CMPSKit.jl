@@ -37,5 +37,4 @@ Base.copy(Ψ::InfiniteCMPS) = InfiniteCMPS(copy(Ψ.Q), map(copy, Ψ.Rs); gauge =
 
 virtualdim(Ψ::InfiniteCMPS) = size(Ψ.Q[0], 1)
 
-const UniformCMPS = InfiniteCMPS{<:Constant{<:AbstractMatrix}}
-const FourierCMPS = InfiniteCMPS{<:FourierSeries{<:AbstractMatrix}}
+const UniformCMPS = InfiniteCMPS{<:Constant}

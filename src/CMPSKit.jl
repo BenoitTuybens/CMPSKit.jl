@@ -8,8 +8,8 @@ export leftgauge, rightgauge, leftgauge!, rightgauge!,
         leftcanonical, rightcanonical, leftcanonical!, rightcanonical!
 export InfiniteCMPS, LeftTransfer, RightTransfer
 export Constant, FourierSeries
-export fit, differentiate, integrate, ∂, ∫, localdot, domain, period, nummodes, density
-export leftreducedoperator, rightreducedoperator, expval, gradient, groundstate
+export fit, differentiate, integrate, ∂, ∫, localdot, domain, period, nummodes
+export leftreducedoperator, rightreducedoperator, expval, gradient, gradient_tens_prod, groundstate, groundstate3
 
 export ψ, ∂ψ
 
@@ -17,6 +17,7 @@ using LinearAlgebra
 using KrylovKit
 using KrylovKit: ConvergenceInfo
 using OptimKit
+using TensorOperations
 
 scalartype(x::Any) = scalartype(typeof(x))
 scalartype(T::Type{<:Number}) = T
