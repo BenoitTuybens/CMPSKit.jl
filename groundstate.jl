@@ -16,10 +16,10 @@ k = 1.
 μ = 1.
 g = 1.
 Λ = 1000.
-gradienttest = false
+gradienttest = true
 tensorproduct = true
 optimisation = true
-lagrangianmultiplier = false
+lagrangianmultiplier = true
 
 if tensorproduct
     #Tensors product ansatz
@@ -97,16 +97,19 @@ if optimisation
 
     #Ψ, ρL, ρR, E, e, normgrad, numfg, history = groundstate3(H, Ψ; optalg = alg1, linalg = GMRES(; tol = 1e-5))
     αs,fs, dfs1, dfs2 = groundstate3(H, Ψ; optalg = alg1, linalg = GMRES(; tol = 1e-5))
-    αs = αs[1:end-1] + αs[2:end]
-    plot!(αs,dfs1)
-    plot!(αs,dfs2)
-    Q = Ψ.Q
-    R1 = Ψ.Rs[1]
-    R2 = Ψ.Rs[2]
-    @show display(R1[]*R2[] - R2[]*R1[])
-    @show expval(ψ[1]*ψ[2] - ψ[2]*ψ[1],Ψ)[]
-    DR1 = differentiate(R1) + Q * R1 - R1 * Q
-    DR2 = differentiate(R2) + Q * R2 - R2 * Q
-    R1² = R1 * R1
-    R2² = R2 * R2
+    αs = (αs[1:end-1] + αs[2:end])/2
+    push!(αs,0.1)
+    #display(plot(αs,dfs1))
+    #display(plot(αs,dfs2))
+    display(plot(αs,[dfs1,dfs2]))
+    gui()
+    # Q = Ψ.Q
+    # R1 = Ψ.Rs[1]
+    # R2 = Ψ.Rs[2]
+    # @show display(R1[]*R2[] - R2[]*R1[])
+    # @show expval(ψ[1]*ψ[2] - ψ[2]*ψ[1],Ψ)[]
+    # DR1 = differentiate(R1) + Q * R1 - R1 * Q
+    # DR2 = differentiate(R2) + Q * R2 - R2 * Q
+    # R1² = R1 * R1
+    # R2² = R2 * R2
 end

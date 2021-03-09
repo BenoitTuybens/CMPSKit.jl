@@ -84,15 +84,16 @@ function groundstate(H::LocalHamiltonian, Ψ₀::UniformCMPS;
     HL, E, e, hL, infoL = leftenv(H, (ΨL₀,ρL,ρR); kwargs...)
     x = (ΨL₀, ρR, HL, E, e, hL)
 
-    x, E, normgrad, numfg, history =
-        optimize(fg, x, optalg; retract = retract,
-                                precondition = precondition,
-                                finalize! = _finalize!,
-                                inner = inner, transport! = transport!,
-                                scale! = scale!, add! = add!,
-                                isometrictransport = true)
-    (ΨL, ρR, HL, E, e, hL) = x
-    return ΨL, ρR, E, e, normgrad, numfg, history
+    #x, E, normgrad, numfg, history =
+        #optimize(fg, x, optalg; retract = retract,
+        #                        precondition = precondition,
+        #                        finalize! = _finalize!,
+        #                        inner = inner, transport! = transport!,
+        #                        scale! = scale!, add! = add!,
+        #                        isometrictransport = true)
+    #(ΨL, ρR, HL, E, e, hL) = x
+    #return ΨL, ρR, E, e, normgrad, numfg, history
+    return optimtest(fg, x; retract = retract, inner = inner)
 end
 
 function groundstate2(H::LocalHamiltonian, Ψ₀::UniformCMPS;
@@ -211,12 +212,17 @@ function groundstate3(H::LocalHamiltonian, Ψ₀::UniformCMPS;
         Q = Q + α * dQ
 
         Ψ = InfiniteCMPS(Q, Rs)
+        ρR, λ, infoR = rightenv(Ψ; eigalg = eigalg, linalg = linalg, kwargs...)
+        #@show λ
+        #ρL, λ, infoR = leftenv(Ψ; eigalg = eigalg, linalg = linalg, kwargs...)
+        #@show λ
         ρL, ρR, infoL, infoR = environments!(Ψ; eigalg = eigalg, linalg = linalg, kwargs...)
-        rmul!(ρR, 1/tr(ρR[]))
-        rmul!(ρL, 1/tr(ρL[]))
+        #rmul!(ρR, 1/tr(ρR[]))
+        #rmul!(ρL, 1/tr(ρL[]))
         HL, E, e, hL, infoL = leftenv(H, (Ψ,ρL,ρR); eigalg = eigalg, linalg = linalg, kwargs...)
         HR, E, e, hR, infoR = rightenv(H, (Ψ,ρL,ρR); eigalg = eigalg, linalg = linalg, kwargs...)
 
+        #dQ = dQ - (λ/α)*one(Q)
 
         if infoR.converged == 0 || infoL.converged == 0
             @warn "step $α : not converged, energy = $e"
@@ -224,7 +230,7 @@ function groundstate3(H::LocalHamiltonian, Ψ₀::UniformCMPS;
             @show infoL
         end
 
-        return (Ψ, ρL, ρR, HL, HR, E, e, hL, hR), d
+        return (Ψ, ρL, ρR, HL, HR, E, e, hL, hR), (dQ,dRs)
     end
 
     transport!(v, x, d, α, xnew) = v # simplest possible transport
@@ -280,20 +286,20 @@ function groundstate3(H::LocalHamiltonian, Ψ₀::UniformCMPS;
         return finalize!(x, E, d, numiter)
     end
     ρL, ρR, infoL, infoR = environments!(Ψ₀; eigalg = eigalg, linalg = linalg, kwargs...)
-    rmul!(ρR, 1/tr(ρR[]))
-    rmul!(ρL, 1/tr(ρL[]))
+    #rmul!(ρR, 1/tr(ρR[]))
+    #rmul!(ρL, 1/tr(ρL[]))
     HL, E, e, hL, infoL = leftenv(H, (Ψ₀,ρL,ρR); kwargs...)
     HR, E, e, hR, infoL = rightenv(H, (Ψ₀,ρL,ρR); kwargs...)
     x = (Ψ₀, ρL, ρR, HL, HR, E, e, hL, hR)
 
-    #x, E, normgrad, numfg, history = optimize(fg, x, optalg; retract = retract,
-                                #precondition = precondition,
-                                #finalize! = _finalize!,
-                                #inner = inner, transport! = transport!,
-                                #scale! = scale!, add! = add!,
-                                #isometrictransport = true)
+    x, E, normgrad, numfg, history = optimize(fg, x, optalg; retract = retract,
+                                precondition = precondition,
+                                finalize! = _finalize!,
+                                inner = inner, transport! = transport!,
+                                scale! = scale!, add! = add!,
+                                isometrictransport = true)
 
-    #(Ψ, ρL, ρR, HL, HR, E, e, hL, hR) = x
-    #return Ψ, ρL, ρR, E, e, normgrad, numfg, history
+    (Ψ, ρL, ρR, HL, HR, E, e, hL, hR) = x
+    return Ψ, ρL, ρR, E, e, normgrad, numfg, history
     return optimtest(fg, x; retract = retract, inner = inner)
 end
