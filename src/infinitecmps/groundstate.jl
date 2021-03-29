@@ -84,16 +84,16 @@ function groundstate(H::LocalHamiltonian, Ψ₀::UniformCMPS;
     HL, E, e, hL, infoL = leftenv(H, (ΨL₀,ρL,ρR); kwargs...)
     x = (ΨL₀, ρR, HL, E, e, hL)
 
-    #x, E, normgrad, numfg, history =
-        #optimize(fg, x, optalg; retract = retract,
-        #                        precondition = precondition,
-        #                        finalize! = _finalize!,
-        #                        inner = inner, transport! = transport!,
-        #                        scale! = scale!, add! = add!,
-        #                        isometrictransport = true)
-    #(ΨL, ρR, HL, E, e, hL) = x
-    #return ΨL, ρR, E, e, normgrad, numfg, history
-    return optimtest(fg, x; retract = retract, inner = inner)
+    x, E, normgrad, numfg, history =
+        optimize(fg, x, optalg; retract = retract,
+                                precondition = precondition,
+                                finalize! = _finalize!,
+                                inner = inner, transport! = transport!,
+                                scale! = scale!, add! = add!,
+                                isometrictransport = true)
+    (ΨL, ρR, HL, E, e, hL) = x
+    return ΨL, ρR, E, e, normgrad, numfg, history
+    #return optimtest(fg, x; retract = retract, inner = inner)
 end
 
 function groundstate2(H::LocalHamiltonian, Ψ₀::UniformCMPS;
@@ -222,7 +222,7 @@ function groundstate3(H::LocalHamiltonian, Ψ₀::UniformCMPS;
         HL, E, e, hL, infoL = leftenv(H, (Ψ,ρL,ρR); eigalg = eigalg, linalg = linalg, kwargs...)
         HR, E, e, hR, infoR = rightenv(H, (Ψ,ρL,ρR); eigalg = eigalg, linalg = linalg, kwargs...)
 
-        #dQ = dQ - (λ/α)*one(Q)
+        dQ = dQ - (λ/α)*one(Q)
 
         if infoR.converged == 0 || infoL.converged == 0
             @warn "step $α : not converged, energy = $e"
@@ -252,7 +252,9 @@ function groundstate3(H::LocalHamiltonian, Ψ₀::UniformCMPS;
     function precondition(x, d)
         Ψ, ρL, ρR, = x
         dQ, dRs = d
-        return posreginv(ρL[0], δ) * dQ * posreginv(ρR[0], δ), Ref(posreginv(ρL[0], δ)) .* dRs .* Ref(posreginv(ρR[0], δ))
+        #dQ = posreginv(ρL[0], δ) * dQ * posreginv(ρR[0], δ)
+        dRs = Ref(posreginv(ρL[0], δ)) .* dRs .* Ref(posreginv(ρR[0], δ))
+        return (dQ, dRs)
     end
 
     function fg(x)
@@ -293,7 +295,7 @@ function groundstate3(H::LocalHamiltonian, Ψ₀::UniformCMPS;
     x = (Ψ₀, ρL, ρR, HL, HR, E, e, hL, hR)
 
     x, E, normgrad, numfg, history = optimize(fg, x, optalg; retract = retract,
-                                precondition = precondition,
+    #                            precondition = precondition,
                                 finalize! = _finalize!,
                                 inner = inner, transport! = transport!,
                                 scale! = scale!, add! = add!,
@@ -301,5 +303,5 @@ function groundstate3(H::LocalHamiltonian, Ψ₀::UniformCMPS;
 
     (Ψ, ρL, ρR, HL, HR, E, e, hL, hR) = x
     return Ψ, ρL, ρR, E, e, normgrad, numfg, history
-    return optimtest(fg, x; retract = retract, inner = inner)
+    #return optimtest(fg, x; retract = retract, inner = inner)
 end

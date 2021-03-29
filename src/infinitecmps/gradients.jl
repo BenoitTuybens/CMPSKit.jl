@@ -28,7 +28,7 @@ end
 
 function gradient_tens_prod(H::LocalHamiltonian, Ψρs::InfiniteCMPSData, HL = nothing, HR = nothing;
                     kwargs...)
-    D = 2
+
     Ψ, ρL, ρR = Ψρs
     if isnothing(HL)
         HL, = leftenv(H, Ψρs; kwargs...)
@@ -38,6 +38,7 @@ function gradient_tens_prod(H::LocalHamiltonian, Ψρs::InfiniteCMPSData, HL = n
     end
 
     Q = Ψ.Q
+    D = Int(sqrt(size(Q[])[1]))
     Rs = Ψ.Rs
 
     gradQ = zero(Q)

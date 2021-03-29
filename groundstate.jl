@@ -11,15 +11,15 @@ using JLD2
 using TensorOperations
 using Plots
 
-D = 2
+D = 4
 k = 1.
 μ = 1.
 g = 1.
 Λ = 1000.
-gradienttest = true
+gradienttest = false
 tensorproduct = true
 optimisation = true
-lagrangianmultiplier = true
+lagrangianmultiplier = false
 
 if tensorproduct
     #Tensors product ansatz
@@ -95,21 +95,27 @@ end
 
 if optimisation
 
-    #Ψ, ρL, ρR, E, e, normgrad, numfg, history = groundstate3(H, Ψ; optalg = alg1, linalg = GMRES(; tol = 1e-5))
-    αs,fs, dfs1, dfs2 = groundstate3(H, Ψ; optalg = alg1, linalg = GMRES(; tol = 1e-5))
-    αs = (αs[1:end-1] + αs[2:end])/2
-    push!(αs,0.1)
-    #display(plot(αs,dfs1))
-    #display(plot(αs,dfs2))
-    display(plot(αs,[dfs1,dfs2]))
-    gui()
-    # Q = Ψ.Q
-    # R1 = Ψ.Rs[1]
-    # R2 = Ψ.Rs[2]
-    # @show display(R1[]*R2[] - R2[]*R1[])
-    # @show expval(ψ[1]*ψ[2] - ψ[2]*ψ[1],Ψ)[]
-    # DR1 = differentiate(R1) + Q * R1 - R1 * Q
-    # DR2 = differentiate(R2) + Q * R2 - R2 * Q
-    # R1² = R1 * R1
-    # R2² = R2 * R2
+    if tensorproduct
+        Ψ, ρL, ρR, E, e, normgrad, numfg, history = groundstate3(H, Ψ; optalg = alg1, linalg = GMRES(; tol = 1e-5))
+        #αs,fs, dfs1, dfs2 = groundstate3(H, Ψ; optalg = alg1, linalg = GMRES(; tol = 1e-5))
+        #αs = (αs[1:end-1] + αs[2:end])/2
+        #push!(αs,0.1)
+    else
+        Ψ, ρR, E, e, normgrad, numfg, history = groundstate(H, Ψ; optalg = alg1, linalg = GMRES(; tol = 1e-5))
+        #αs,fs, dfs1, dfs2 = groundstate(H, Ψ; optalg = alg1, linalg = GMRES(; tol = 1e-5))
+        #αs = (αs[1:end-1] + αs[2:end])/2
+        #push!(αs,0.1)
+    end
+
+    #display(plot(αs,[dfs1,dfs2]))
+    #gui()
+    @show Q = Ψ.Q
+    @show R1 = Ψ.Rs[1]
+    @show R2 = Ψ.Rs[2]
+    @show R1[]*R2[] - R2[]*R1[]
+    @show expval(ψ[1]*ψ[2] - ψ[2]*ψ[1],Ψ)[]
+    #DR1 = differentiate(R1) + Q * R1 - R1 * Q
+    #DR2 = differentiate(R2) + Q * R2 - R2 * Q
+    #R1² = R1 * R1
+    #R2² = R2 * R2
 end
