@@ -48,18 +48,27 @@ function environment(ΨL,ρL,ρR)
         end
 
         HL = rmul!(HL + HL', 0.5)
-        HL = truncate!(HL; tol = tol/10)
+        HL = CMPSKit.truncate!(HL; tol = tol/10)
         return HL
     end
 end
 Env = environment(ΨL,ρL,ρR)
+R² = dot(R,R)
 @show Z
 @show E
 @show density
 @show density² = density^2
 @show tr(Env*ρR)
 @show 2*tr(Env*R*ρR*R')[]
+@show tr(R²*ρR*R²')
 @show variance = sqrt(2*tr(Env*R*ρR*R')[] + density)
+n̂ = ψ'*ψ
+N̂ = ∫(n̂, (-Inf,+Inf));
+@show N = expval(n̂, ΨL, ρL, ρR)
+N = tr(R*ρR*R')[]
+@show sqrt(2*tr(leftenv(N̂, (ΨL,ρL,ρR))[1]*R*ρR*R')[] + N)
+
+@show psi = expval(ψ, ΨL, ρL, ρR)
 
 # groundstate(H, Ψ; optalg = alg, linalg = GMRES(; tol = 1e-4), finalize! = finalize!)
 #ΨL, ρR, E, e, normgrad, numfg, history = groundstate(H, Ψ; optalg = alg, linalg = GMRES(; tol = 1e-6))

@@ -20,18 +20,39 @@ gradienttest = false
 tensorproduct = true
 optimisation = true
 lagrangianmultiplier = false
+leftgauge = true
 
 if tensorproduct
-    #Tensors product ansatz
-    Id = 1*Matrix(I,D,D)
-    Q = Constant(randn(D^2,D^2))
-    R1 = Constant(kron(Id,randn(D,D)))
-    R2 = Constant(kron(randn(D,D),Id))
+    if leftgauge
+        #Tensors product ansatz
+        Id = 1*Matrix(I,D,D)
+        KL = Constant(randn(D^2,D^2))
+        KL = 0.5*(KL-KL')
+        R1 = Constant(kron(Id,randn(D,D)))
+        R2 = Constant(kron(randn(D,D),Id))
+        RLs = (R1,R2)
+        QL = KL
+        for R in RLs
+            mul!(QL, R', R, -1/2, 1)
+        end
+        #Put them in cMPS form
+        Ψ = InfiniteCMPS(QL, (R1,R2); gauge = :left)
+    else
+        #Tensors product ansatz
+        Id = 1*Matrix(I,D,D)
+        Q = Constant(randn(D^2,D^2))
+        R1 = Constant(kron(Id,randn(D,D)))
+        R2 = Constant(kron(randn(D,D),Id))
+        #Put them in cMPS form
+        Ψ = InfiniteCMPS(Q, (R1,R2))
+    end
 else
     #Random Tensors
     Q = Constant(randn(D^2,D^2))
     R1 = Constant(randn(D^2,D^2))
     R2 = Constant(randn(D^2,D^2))
+    #Put them in cMPS form
+    Ψ = InfiniteCMPS(Q, (R1,R2))
 end
 
 function firstordercorrection(dQ,gradQ,dR1,gradR1,dR2,gradR2)
@@ -39,18 +60,22 @@ function firstordercorrection(dQ,gradQ,dR1,gradR1,dR2,gradR2)
     return 2*real(dot(dQ,gradQ) + dot(dR1,gradR1) + dot(dR2,gradR2));
 end
 
-#Put them in cMPS form
-Ψ = InfiniteCMPS(Q, (R1,R2))
+
 alg1 = LBFGS(; verbosity = 2, maxiter = 1000000, gradtol = 1e-4);
 alg2 = ConjugateGradient(; verbosity = 2, maxiter = 1000000, gradtol = 1e-4);
+if leftgauge && tensorproduct
+    linalg = GMRES(krylovdim = 80; tol = 1e-5)
+else
+    linalg = GMRES(krylovdim = 50; tol = 1e-5)
+end
 #Lagrangian multiplier
 
 if lagrangianmultiplier
     h = k * (∂ψ[1]'*∂ψ[1] + ∂ψ[2]'*∂ψ[2]) - μ * (ψ[1]'*ψ[1] + ψ[2]'*ψ[2]) + g * ((ψ[1]')^2*ψ[1]^2 + (ψ[2]')^2*ψ[2]^2) + Λ * ((ψ[1]*ψ[2] - ψ[2]*ψ[1])' * (ψ[1]*ψ[2] - ψ[2]*ψ[1]))
-    H = ∫(k * (∂ψ[1]'*∂ψ[1] + ∂ψ[2]'*∂ψ[2]) - μ * (ψ[1]'*ψ[1] + ψ[2]'*ψ[2]) + g * ((ψ[1]')^2*ψ[1]^2 + (ψ[2]')^2*ψ[2]^2) + Λ * ((ψ[1]*ψ[2] - ψ[2]*ψ[1])' * (ψ[1]*ψ[2] - ψ[2]*ψ[1])), (-Inf,+Inf))
+    H = ∫(h, (-Inf,+Inf))
 else
     h = k * (∂ψ[1]'*∂ψ[1] + ∂ψ[2]'*∂ψ[2]) - μ * (ψ[1]'*ψ[1] + ψ[2]'*ψ[2]) + g * ((ψ[1]')^2*ψ[1]^2 + (ψ[2]')^2*ψ[2]^2)
-    H = ∫(k * (∂ψ[1]'*∂ψ[1] + ∂ψ[2]'*∂ψ[2]) - μ * (ψ[1]'*ψ[1] + ψ[2]'*ψ[2]) + g * ((ψ[1]')^2*ψ[1]^2 + (ψ[2]')^2*ψ[2]^2), (-Inf,+Inf))
+    H = ∫(h, (-Inf,+Inf))
 end
 
 #h = k * (∂ψ[1]'*∂ψ[1] + ∂ψ[2]'*∂ψ[2]) - μ * (ψ[1]'*ψ[1] + ψ[2]'*ψ[2]) + g * ((ψ[1]')^2*ψ[1]^2 + (ψ[2]')^2*ψ[2]^2) + Λ * ((ψ[1]*ψ[2] - ψ[2]*ψ[1])' * (ψ[1]*ψ[2] - ψ[2]*ψ[1]))
@@ -64,7 +89,7 @@ if gradienttest
     HL, E, e, hL, infoL = leftenv(H, (Ψ,ρL,ρR);linalg = GMRES(; tol = 1e-6))
     HR, E, e, hR, infoR = rightenv(H, (Ψ,ρL,ρR);linalg = GMRES(; tol = 1e-6))
 
-    gradQ, gradRs = gradient_tens_prod(H, (Ψ, ρL, ρR))
+    gradQ, gradRs = gradient(H, (Ψ, ρL, ρR))
     dQ = Constant(1e-4*randn(D^2,D^2))
     dR1 = Constant(kron(Id,1e-4*(randn(D,D))))
     dR2 = Constant(kron(1e-4*(randn(D,D)),Id))
@@ -94,21 +119,27 @@ end
 
 
 if optimisation
-
     if tensorproduct
-        Ψ, ρL, ρR, E, e, normgrad, numfg, history = groundstate3(H, Ψ; optalg = alg1, linalg = GMRES(; tol = 1e-5))
+        if leftgauge
+            Ψ, ρR, E, e, normgrad, numfg, history = groundstate4(H, Ψ; optalg = alg1, linalg = linalg)
+            #αs,fs, dfs1, dfs2 = groundstate4(H, Ψ; optalg = alg1, linalg = GMRES(; tol = 1e-5))
+            #αs = (αs[1:end-1] + αs[2:end])/2
+            #push!(αs,0.1)
+            #display(plot(αs,[dfs1,dfs2]))
+            #gui()
+        else
+            Ψ, ρL, ρR, E, e, normgrad, numfg, history = groundstate3(H, Ψ; optalg = alg1, linalg = linalg)
+        end
         #αs,fs, dfs1, dfs2 = groundstate3(H, Ψ; optalg = alg1, linalg = GMRES(; tol = 1e-5))
         #αs = (αs[1:end-1] + αs[2:end])/2
         #push!(αs,0.1)
     else
-        Ψ, ρR, E, e, normgrad, numfg, history = groundstate(H, Ψ; optalg = alg1, linalg = GMRES(; tol = 1e-5))
+        Ψ, ρR, E, e, normgrad, numfg, history = groundstate(H, Ψ; optalg = alg1, linalg = linalg)
         #αs,fs, dfs1, dfs2 = groundstate(H, Ψ; optalg = alg1, linalg = GMRES(; tol = 1e-5))
         #αs = (αs[1:end-1] + αs[2:end])/2
         #push!(αs,0.1)
     end
 
-    #display(plot(αs,[dfs1,dfs2]))
-    #gui()
     @show Q = Ψ.Q
     @show R1 = Ψ.Rs[1]
     @show R2 = Ψ.Rs[2]

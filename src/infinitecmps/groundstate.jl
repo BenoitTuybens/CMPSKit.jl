@@ -260,7 +260,22 @@ function groundstate3(H::LocalHamiltonian, Ψ₀::UniformCMPS;
     function fg(x)
         (Ψ, ρL, ρR, HL, HR, E, e, hL, hR) = x
 
-        gradQ, gradRs = gradient_tens_prod(H, (Ψ, ρL, ρR), HL, HR; kwargs...)
+        gradQ, gradRs = gradient(H, (Ψ, ρL, ρR), HL, HR; kwargs...)
+
+        Q = Ψ.Q
+        D = Int(sqrt(size(Q[])[1]))
+        Rs = Ψ.Rs
+
+        Id = 1*Matrix(I,D,D)
+        gradR1 = gradRs[1][]
+        gradR2 = gradRs[2][]
+        gradR1 = reshape(gradR1,D,D,D,D)
+        gradR2 = reshape(gradR2,D,D,D,D)
+        @tensor gradR1[a,b] := gradR1[a,c,b,c]
+        @tensor gradR2[a,b] := gradR2[c,a,c,b]
+        gradR1 = Constant(kron(Id,gradR1/D))
+        gradR2 = Constant(kron(gradR2/D,Id))
+        gradRs = (gradR1,gradR2)
 
         return E, (gradQ, gradRs)
     end
@@ -303,5 +318,150 @@ function groundstate3(H::LocalHamiltonian, Ψ₀::UniformCMPS;
 
     (Ψ, ρL, ρR, HL, HR, E, e, hL, hR) = x
     return Ψ, ρL, ρR, E, e, normgrad, numfg, history
+    #return optimtest(fg, x; retract = retract, inner = inner)
+end
+
+function groundstate4(H::LocalHamiltonian, Ψ₀::UniformCMPS;
+                        optalg = ConjugateGradient(; verbosity = 2, gradtol = 1e-7),
+                        eigalg = defaulteigalg(Ψ₀),
+                        linalg = defaultlinalg(Ψ₀),
+                        finalize! = OptimKit._finalize!,
+                        kwargs...)
+
+    δ = 1
+    function retract(x, d, α)
+        ΨL, = x
+        QL = ΨL.Q
+        RLs = ΨL.Rs
+        KL = copy(QL)
+        for R in RLs
+            mul!(KL, R', R, +1/2, 1)
+        end
+
+        dK, dRs = d
+
+        RLs = RLs .+ α .* dRs
+        KL = KL + α * dK
+        QL = KL
+        for R in RLs
+            mul!(QL, R', R, -1/2, 1)
+        end
+
+        ΨL = InfiniteCMPS(QL, RLs; gauge = :left)
+        ρR, λ, infoR = rightenv(ΨL; eigalg = eigalg, linalg = linalg, kwargs...)
+        rmul!(ρR, 1/tr(ρR[]))
+        ρL = one(ρR)
+        HL, E, e, hL, infoL =
+            leftenv(H, (ΨL,ρL,ρR); eigalg = eigalg, linalg = linalg, kwargs...)
+
+        if infoR.converged == 0 || infoL.converged == 0
+            @warn "step $α : not converged, energy = $e"
+            @show infoR
+            @show infoL
+        end
+
+        return (ΨL, ρR, HL, E, e, hL), d
+    end
+
+    transport!(v, x, d, α, xnew) = v # simplest possible transport
+
+    function inner(x, d1, d2)
+        dK1, dRs1 = d1
+        dK2, dRs2 = d2
+        s = dK1 === dK2 ? 2*norm(dK1)^2 : 2*real(dot(dK1, dK2))
+        for (dRs1,dRs2) in zip(dRs1, dRs2)
+            if dRs1 === dRs2
+                s += 2*norm(dRs1)^2
+            else
+                s += 2*real(dot(dRs1, dRs2))
+            end
+        end
+        return s
+    end
+
+    function precondition(x, d)
+        ΨL, ρR, = x
+        dK, dRs = d
+        return dRs .* Ref(posreginv(ρR[0], δ))
+    end
+
+    function fg(x)
+        (ΨL, ρR, HL, E, e, hL) = x
+
+        gradQ, gradRs = gradient(H, (ΨL, one(ρR), ρR), HL, zero(HL); kwargs...)
+
+        Q = ΨL.Q
+        Rs = ΨL.Rs
+        D = Int(sqrt(size(Q[])[1]))
+
+        # Id = 1*Matrix(I,D,D)
+        # gradR1 = gradRs[1][]
+        # gradR2 = gradRs[2][]
+        # gradR1 = reshape(gradR1,D,D,D,D)
+        # gradR2 = reshape(gradR2,D,D,D,D)
+        # @tensor gradR1[a,b] := gradR1[a,c,b,c]
+        # @tensor gradR2[a,b] := gradR2[c,a,c,b]
+        # gradR1 = Constant(kron(Id,gradR1/D))
+        # gradR2 = Constant(kron(gradR2/D,Id))
+        # gradRs = (gradR1,gradR2)
+
+        dK = 0.5*(gradQ - gradQ')
+        dRs = gradRs .- (Rs) .* Ref(0.5*(gradQ + gradQ'))
+
+        Id = 1*Matrix(I,D,D)
+        dR1 = dRs[1][]
+        dR2 = dRs[2][]
+        dR1 = reshape(dR1,D,D,D,D)
+        dR2 = reshape(dR2,D,D,D,D)
+        @tensor dR1[a,b] := dR1[a,c,b,c]
+        @tensor dR2[a,b] := dR2[c,a,c,b]
+        dR1 = Constant(kron(Id,dR1/D))
+        dR2 = Constant(kron(dR2/D,Id))
+        dRs = (dR1,dR2)
+
+        return E, (dK, dRs)
+    end
+
+    function scale!(d, α)
+        dK, dRs = d
+        rmul!(dK, α)
+        for dR in dRs
+            rmul!(dR, α)
+        end
+        return d
+    end
+    function add!(d1, d2, α)
+        dK1, dR1s = d1
+        dK2, dR2s = d2
+        axpy!(α, dK2, dK1)
+        for (dR1, dR2) in zip(dR1s, dR2s)
+            axpy!(α, dR2, dR1)
+        end
+        return d1
+    end
+
+    function _finalize!(x, E, d, numiter)
+        normgrad2 = real(inner(x, d, d))
+        δ = max(1e-12, 1e-3*normgrad2)
+        return finalize!(x, E, d, numiter)
+    end
+
+    ΨL₀ = Ψ₀
+    #ΨL₀, = leftgauge(Ψ₀; kwargs...)
+    ρR, λ, infoR = rightenv(ΨL₀; kwargs...)
+    ρL = one(ρR)
+    rmul!(ρR, 1/tr(ρR[]))
+    HL, E, e, hL, infoL = leftenv(H, (ΨL₀,ρL,ρR); kwargs...)
+    x = (ΨL₀, ρR, HL, E, e, hL)
+
+    x, E, normgrad, numfg, history =
+        optimize(fg, x, optalg; retract = retract,
+    #                            precondition = precondition,
+    #                            finalize! = _finalize!,
+                                inner = inner, transport! = transport!,
+                                scale! = scale!, add! = add!,
+                                isometrictransport = true)
+    (ΨL, ρR, HL, E, e, hL) = x
+    return ΨL, ρR, E, e, normgrad, numfg, history
     #return optimtest(fg, x; retract = retract, inner = inner)
 end
