@@ -11,7 +11,7 @@ using JLD2
 using TensorOperations
 using Plots
 
-D = 4
+D = 5
 k = 1.
 μ = 1.
 g = 1.

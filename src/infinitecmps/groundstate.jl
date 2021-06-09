@@ -382,7 +382,28 @@ function groundstate4(H::LocalHamiltonian, Ψ₀::UniformCMPS;
     function precondition(x, d)
         ΨL, ρR, = x
         dK, dRs = d
-        return dRs .* Ref(posreginv(ρR[0], δ))
+
+        Q = ΨL.Q
+        Rs = ΨL.Rs
+        D = Int(sqrt(size(Q[])[1]))
+
+        Id = 1*Matrix(I,D,D)
+        ρR1 = reshape(ρR[0],D,D,D,D)
+        ρR2 = reshape(ρR[0],D,D,D,D)
+        @tensor ρR1[a,b] := ρR1[a,c,b,c]
+        @tensor ρR2[a,b] := ρR2[c,a,c,b]
+
+        dR1 = dRs[1][]
+        dR2 = dRs[2][]
+        dR1 = reshape(dR1,D,D,D,D)
+        dR2 = reshape(dR2,D,D,D,D)
+        @tensor dR1[a,b] := dR1[a,c,b,c]
+        @tensor dR2[a,b] := dR2[c,a,c,b]
+        dR1 = Constant(kron(Id,dR1*posreginv(ρR1, δ)/D))
+        dR2 = Constant(kron(dR2*posreginv(ρR2, δ)/D,Id))
+        dRs = (dR1,dR2)
+
+        return (dK,dRs)
     end
 
     function fg(x)
@@ -456,7 +477,7 @@ function groundstate4(H::LocalHamiltonian, Ψ₀::UniformCMPS;
 
     x, E, normgrad, numfg, history =
         optimize(fg, x, optalg; retract = retract,
-    #                            precondition = precondition,
+                                precondition = precondition,
     #                            finalize! = _finalize!,
                                 inner = inner, transport! = transport!,
                                 scale! = scale!, add! = add!,
