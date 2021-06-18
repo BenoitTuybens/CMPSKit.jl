@@ -615,7 +615,7 @@ function groundstate5(H::LocalHamiltonian, Ψ₀::UniformCMPS;
     #return optimtest(fg, x; retract = retract, inner = inner)
 end
 
-function groundstate6(H::LocalHamiltonian, Ψ₀::UniformCMPS,V,Ss;
+function groundstate6(H::LocalHamiltonian, Ψ₀::UniformCMPS, V, Ss;
                         optalg = ConjugateGradient(; verbosity = 2, gradtol = 1e-7),
                         eigalg = defaulteigalg(Ψ₀),
                         linalg = defaultlinalg(Ψ₀),
@@ -641,7 +641,7 @@ function groundstate6(H::LocalHamiltonian, Ψ₀::UniformCMPS,V,Ss;
             mul!(RdR, R', dR, true, true)
         end
 
-        V = Constant(exp(α * dV[]) * inv(V)[]) * V
+        V = Constant(exp(α * dV[] * inv(V)[])) * V
         Ss = Ss .+ α .* dSs
 
         KL = KL - (α/2) * (RdR - RdR')
@@ -724,7 +724,7 @@ function groundstate6(H::LocalHamiltonian, Ψ₀::UniformCMPS,V,Ss;
 
         dV = zero(V)
         for (R, dR) in zip(Rs,dRs)
-            dV += (dR*R' - R'*dR) 
+            dV += (dR*R' - R'*dR) * inv(V)'
         end
 
         return E, (dV, dSs)
