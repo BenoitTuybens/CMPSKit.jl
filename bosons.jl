@@ -13,9 +13,9 @@ using Plots
 
 D = 4
 k = 1.
-μ = 1.75
+μ = 2.3
 c = 1.5
-g = 1.
+g = 2.
 Λ = 1000.
 gradienttest = false
 tensorproduct = false
@@ -178,14 +178,15 @@ if optimisation
     @show R1[]*R2[] - R2[]*R1[]
     @show expval(ψ[1]*ψ[2] - ψ[2]*ψ[1],Ψ)[]
 
-    # n̂₁ = ψ[1]'*ψ[1]
-    # n̂₂ = ψ[2]'*ψ[2]
-    # N̂₂ = ∫(n̂₂, (-Inf,+Inf));
-    # N̂₁ = ∫(n̂₁, (-Inf,+Inf));
-    # ρL = one(ρR)
-    # @show N₁ = expval(n̂₁, Ψ, ρL, ρR)
-    # @show N₂ = expval(n̂₂, Ψ, ρL, ρR)
-    # @show Δρ² = abs(2*tr(leftenv(N̂₂, (Ψ,ρL,ρR))[1]*R1*ρR*R1')[] - expval(n̂₁, Ψ, ρL, ρR)[]*expval(n̂₂, Ψ, ρL, ρR)[])
+     n̂₁ = ψ[1]'*ψ[1]
+     n̂₂ = ψ[2]'*ψ[2]
+     N̂₂ = ∫(n̂₂, (-Inf,+Inf));
+     N̂₁ = ∫(n̂₁, (-Inf,+Inf));
+     ρL = one(ρR)
+     @show N₁ = expval(n̂₁, Ψ, ρL, ρR)
+     @show N₂ = expval(n̂₂, Ψ, ρL, ρR)
+     @show ΔN² = abs(2*tr(leftenv(N̂₂, (Ψ,ρL,ρR))[1]*R1*ρR*R1')[] - expval(n̂₁, Ψ, ρL, ρR)[] * expval(n̂₂, Ψ, ρL, ρR)[])
+     @show Δρ² = abs(expval(ψ[2]'*ψ[1]'*ψ[2]*ψ[1], Ψ, ρL, ρR)[] - expval(n̂₁, Ψ, ρL, ρR)[] * expval(n̂₂, Ψ, ρL, ρR)[])
     #DR1 = differentiate(R1) + Q * R1 - R1 * Q
     #DR2 = differentiate(R2) + Q * R2 - R2 * Q
     #R1² = R1 * R1

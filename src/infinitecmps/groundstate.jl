@@ -644,12 +644,13 @@ function groundstate6(H::LocalHamiltonian, Ψ₀::UniformCMPS, V, Ss;
         V = Constant(exp(α * dV[] * inv(V)[])) * V
         Ss = Ss .+ α .* dSs
 
+        RLs = Ref(V) .* Ss .* Ref(inv(V))
         KL = KL - (α/2) * (RdR - RdR')
         QL = KL
         for R in RLs
             mul!(QL, R', R, -1/2, 1)
         end
-        Rls = Ref(V) .* Ss .* Ref(inv(V))
+
 
         ΨL = InfiniteCMPS(QL, RLs; gauge = :left)
         ρR, λ, infoR = rightenv(ΨL; eigalg = eigalg, linalg = linalg, kwargs...)
@@ -722,10 +723,12 @@ function groundstate6(H::LocalHamiltonian, Ψ₀::UniformCMPS, V, Ss;
 
         dSs = Constant.(diagm.((diag.(broadcast(x->x[],(Ref(V') .* dRs .* Ref(inv(V)')))))))
 
-        dV = zero(V)
-        for (R, dR) in zip(Rs,dRs)
-            dV += (dR*R' - R'*dR) * inv(V)'
-        end
+        #dV = zero(V)
+        #for (R, dR) in zip(Rs,dRs)
+        #    dV += (dR*R' - R'*dR) * (inv(V))'
+        #end
+
+        dV = sum((dRs .* adjoint.(Rs) .- adjoint.(Rs) .* dRs) .* Ref(inv(V)'))
 
         return E, (dV, dSs)
     end
