@@ -9,7 +9,7 @@ export leftgauge, rightgauge, leftgauge!, rightgauge!,
 export InfiniteCMPS, LeftTransfer, RightTransfer
 export Constant, FourierSeries
 export fit, differentiate, integrate, ∂, ∫, localdot, domain, period, nummodes
-export leftreducedoperator, rightreducedoperator, expval, gradient, groundstate, groundstate3, groundstate4, groundstate5, groundstate6
+export leftreducedoperator, rightreducedoperator, expval, gradient, groundstate, groundstate3, groundstate4, groundstate5, groundstate6, groundstate4_constrained
 
 export ψ, ∂ψ
 
