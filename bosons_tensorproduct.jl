@@ -147,7 +147,12 @@ if optimisation
     if tensorproduct
         if leftgauge
             if Zueco
-                Ψ, ρR, E, e, normgrad, numfg, history = groundstate4_constrained(H, Ψ, (0.63,0.63); optalg = alg1, linalg = linalg)
+                #Ψ, ρR, E, e, normgrad, numfg, history = groundstate4_constrained(H, Ψ, (0.63,0.63); optalg = alg1, linalg = linalg)
+                αs,fs, dfs1, dfs2 = groundstate4_constrained(H, Ψ, (0.63,0.63); optalg = alg1, linalg = GMRES(; tol = 1e-5))
+                αs = (αs[1:end-1] + αs[2:end])/2
+                push!(αs,0.1)
+                display(plot(αs,[dfs1,dfs2]))
+                gui()
             else
                 Ψ, ρR, E, e, normgrad, numfg, history = groundstate4_unconstrained(H, Ψ; optalg = alg1, linalg = linalg)
             end

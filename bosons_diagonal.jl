@@ -21,7 +21,7 @@ gradienttest = false
 tensorproduct = false
 optimisation = true
 lagrangianmultiplier = false
-leftgauge = true
+leftgauge = false
 Zueco = false
 diagonal = true
 
@@ -52,8 +52,8 @@ if tensorproduct
 elseif diagonal
     #Tensors product ansatz
     V = Constant(randn(D,D))
-    S1 = Constant(diagm(randn(D)))
-    S2 = Constant(diagm(randn(D)))
+    S1 = Constant(diagm(rand(D)/D))
+    S2 = Constant(diagm(rand(D)/D))
     KL = Constant(randn(D,D))
     KL = 0.5*(KL-KL')
     R1 = V*S1*inv(V)
@@ -172,21 +172,21 @@ if optimisation
         #push!(αs,0.1)
     end
 
-    @show Q = Ψ.Q
-    @show R1 = Ψ.Rs[1]
-    @show R2 = Ψ.Rs[2]
-    @show R1[]*R2[] - R2[]*R1[]
-    @show expval(ψ[1]*ψ[2] - ψ[2]*ψ[1],Ψ)[]
+    #@show Q = Ψ.Q
+    #@show R1 = Ψ.Rs[1]
+    #@show R2 = Ψ.Rs[2]
+    #@show R1[]*R2[] - R2[]*R1[]
+    #@show expval(ψ[1]*ψ[2] - ψ[2]*ψ[1],Ψ)[]
 
-     n̂₁ = ψ[1]'*ψ[1]
-     n̂₂ = ψ[2]'*ψ[2]
-     N̂₂ = ∫(n̂₂, (-Inf,+Inf));
-     N̂₁ = ∫(n̂₁, (-Inf,+Inf));
-     ρL = one(ρR)
-     @show N₁ = expval(n̂₁, Ψ, ρL, ρR)
-     @show N₂ = expval(n̂₂, Ψ, ρL, ρR)
-     @show ΔN² = abs(2*tr(leftenv(N̂₂, (Ψ,ρL,ρR))[1]*R1*ρR*R1')[] - expval(n̂₁, Ψ, ρL, ρR)[] * expval(n̂₂, Ψ, ρL, ρR)[])
-     @show Δρ² = abs(expval(ψ[2]'*ψ[1]'*ψ[2]*ψ[1], Ψ, ρL, ρR)[] - expval(n̂₁, Ψ, ρL, ρR)[] * expval(n̂₂, Ψ, ρL, ρR)[])
+     #n̂₁ = ψ[1]'*ψ[1]
+     #n̂₂ = ψ[2]'*ψ[2]
+     #N̂₂ = ∫(n̂₂, (-Inf,+Inf));
+     #N̂₁ = ∫(n̂₁, (-Inf,+Inf));
+     #ρL = one(ρR)
+     #@show N₁ = expval(n̂₁, Ψ, ρL, ρR)
+     #@show N₂ = expval(n̂₂, Ψ, ρL, ρR)
+     #@show ΔN² = abs(2*tr(leftenv(N̂₂, (Ψ,ρL,ρR))[1]*R1*ρR*R1')[] - expval(n̂₁, Ψ, ρL, ρR)[] * expval(n̂₂, Ψ, ρL, ρR)[])
+     #@show Δρ² = abs(expval(ψ[2]'*ψ[1]'*ψ[2]*ψ[1], Ψ, ρL, ρR)[] - expval(n̂₁, Ψ, ρL, ρR)[] * expval(n̂₂, Ψ, ρL, ρR)[])
     #DR1 = differentiate(R1) + Q * R1 - R1 * Q
     #DR2 = differentiate(R2) + Q * R2 - R2 * Q
     #R1² = R1 * R1

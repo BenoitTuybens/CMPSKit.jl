@@ -18,3 +18,17 @@ defaulttol(a) = eps(real(float(one(eltype(a)))))^(1/2)
      Dinv = inv.(hypot.(D, δ))
      return  V * Diagonal(Dinv) * V'
  end
+
+ # computes solution C of A * C + C * A = B for A hermitian
+  function symm_sylvester_reg(A::AbstractMatrix, B::AbstractMatrix, δ = zero(eltype(A)))
+      n = LinearAlgebra.checksquare(A)
+      Λ, U = eigen(Hermitian(A))
+      UdCU = U' * B * U
+      for j = 1:n
+          for i = 1:n
+              UdCU[i,j] /= sqrt((Λ[i] + Λ[j])^2 + δ^2)
+          end
+      end
+      C = U*UdCU*U'
+      return C
+  end
