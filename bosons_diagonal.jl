@@ -81,12 +81,12 @@ function firstordercorrection(dQ,gradQ,dR1,gradR1,dR2,gradR2)
 end
 
 
-alg1 = LBFGS(; verbosity = 2, maxiter = 1000000, gradtol = 1e-4);
-alg2 = ConjugateGradient(; verbosity = 2, maxiter = 1000000, gradtol = 1e-4);
+alg1 = LBFGS(; verbosity = 20, maxiter = 1000000, gradtol = 1e-4);
+alg2 = ConjugateGradient(; verbosity = 20, maxiter = 1000000, gradtol = 1e-4);
 if leftgauge && tensorproduct
     linalg = GMRES(krylovdim = 80; tol = 1e-5)
 else
-    linalg = GMRES(krylovdim = 50; tol = 1e-5)
+    linalg = GMRES(krylovdim = 100; tol = 1e-5)
 end
 #Lagrangian multiplier
 
@@ -146,7 +146,7 @@ end
 if optimisation
     if tensorproduct
         if leftgauge
-            Ψ, ρR, E, e, normgrad, numfg, history = groundstate4(H, Ψ; optalg = alg1, linalg = linalg)
+            Ψ, ρR, E, e, normgrad, numfg, history = groundstate4_unconstrained(H, Ψ; optalg = alg1, linalg = linalg)
             #αs,fs, dfs1, dfs2 = groundstate4(H, Ψ; optalg = alg1, linalg = GMRES(; tol = 1e-5))
             #αs = (αs[1:end-1] + αs[2:end])/2
             #push!(αs,0.1)
@@ -159,12 +159,12 @@ if optimisation
         #αs = (αs[1:end-1] + αs[2:end])/2
         #push!(αs,0.1)
     elseif diagonal
-        #Ψ, ρR, E, e, normgrad, numfg, history = groundstate6(H, Ψ, V, Ss; optalg = alg1, linalg = linalg)
-        αs,fs, dfs1, dfs2 = groundstate6(H, Ψ, V, Ss; optalg = alg1, linalg = GMRES(; tol = 1e-5))
-        αs = (αs[1:end-1] + αs[2:end])/2
-        push!(αs,0.1)
-        display(plot(αs,[dfs1,dfs2]))
-        gui()
+        Ψ, ρR, E, e, normgrad, numfg, history = groundstate6(H, Ψ, V, Ss; optalg = alg1, linalg = linalg)
+        #αs,fs, dfs1, dfs2 = groundstate6(H, Ψ, V, Ss; optalg = alg1, linalg = GMRES(; tol = 1e-5))
+        #αs = (αs[1:end-1] + αs[2:end])/2
+        #push!(αs,0.1)
+        #display(plot(αs,[dfs1,dfs2]))
+        #gui()
     else
         Ψ, ρR, E, e, normgrad, numfg, history = groundstate(H, Ψ; optalg = alg1, linalg = linalg)
         #αs,fs, dfs1, dfs2 = groundstate(H, Ψ; optalg = alg1, linalg = GMRES(; tol = 1e-5))
@@ -172,21 +172,21 @@ if optimisation
         #push!(αs,0.1)
     end
 
-    #@show Q = Ψ.Q
-    #@show R1 = Ψ.Rs[1]
-    #@show R2 = Ψ.Rs[2]
-    #@show R1[]*R2[] - R2[]*R1[]
-    #@show expval(ψ[1]*ψ[2] - ψ[2]*ψ[1],Ψ)[]
+    @show Q = Ψ.Q
+    @show R1 = Ψ.Rs[1]
+    @show R2 = Ψ.Rs[2]
+    @show R1[]*R2[] - R2[]*R1[]
+    @show expval(ψ[1]*ψ[2] - ψ[2]*ψ[1],Ψ)[]
 
-     #n̂₁ = ψ[1]'*ψ[1]
-     #n̂₂ = ψ[2]'*ψ[2]
-     #N̂₂ = ∫(n̂₂, (-Inf,+Inf));
-     #N̂₁ = ∫(n̂₁, (-Inf,+Inf));
-     #ρL = one(ρR)
-     #@show N₁ = expval(n̂₁, Ψ, ρL, ρR)
-     #@show N₂ = expval(n̂₂, Ψ, ρL, ρR)
-     #@show ΔN² = abs(2*tr(leftenv(N̂₂, (Ψ,ρL,ρR))[1]*R1*ρR*R1')[] - expval(n̂₁, Ψ, ρL, ρR)[] * expval(n̂₂, Ψ, ρL, ρR)[])
-     #@show Δρ² = abs(expval(ψ[2]'*ψ[1]'*ψ[2]*ψ[1], Ψ, ρL, ρR)[] - expval(n̂₁, Ψ, ρL, ρR)[] * expval(n̂₂, Ψ, ρL, ρR)[])
+     n̂₁ = ψ[1]'*ψ[1]
+     n̂₂ = ψ[2]'*ψ[2]
+     N̂₂ = ∫(n̂₂, (-Inf,+Inf));
+     N̂₁ = ∫(n̂₁, (-Inf,+Inf));
+     ρL = one(ρR)
+     @show N₁ = expval(n̂₁, Ψ, ρL, ρR)
+     @show N₂ = expval(n̂₂, Ψ, ρL, ρR)
+     @show ΔN² = abs(2*tr(leftenv(N̂₂, (Ψ,ρL,ρR))[1]*R1*ρR*R1')[] - expval(n̂₁, Ψ, ρL, ρR)[] * expval(n̂₂, Ψ, ρL, ρR)[])
+     @show Δρ² = abs(expval(ψ[2]'*ψ[1]'*ψ[2]*ψ[1], Ψ, ρL, ρR)[] - expval(n̂₁, Ψ, ρL, ρR)[] * expval(n̂₂, Ψ, ρL, ρR)[])
     #DR1 = differentiate(R1) + Q * R1 - R1 * Q
     #DR2 = differentiate(R2) + Q * R2 - R2 * Q
     #R1² = R1 * R1
