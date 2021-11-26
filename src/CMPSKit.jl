@@ -9,7 +9,7 @@ export leftgauge, rightgauge, leftgauge!, rightgauge!,
 export InfiniteCMPS, LeftTransfer, RightTransfer
 export Constant, FourierSeries
 export fit, differentiate, integrate, ∂, ∫, localdot, domain, period, nummodes
-export leftreducedoperator, rightreducedoperator, expval, gradient, groundstate, groundstate3, groundstate4_unconstrained, groundstate5, groundstate6, groundstate4_constrained
+export leftreducedoperator, rightreducedoperator, expval, gradient, groundstate, groundstate3, groundstate4_unconstrained, groundstate5, groundstate6, groundstate4_constrained, groundstate7
 
 export ψ, ∂ψ
 
@@ -19,6 +19,8 @@ using KrylovKit: ConvergenceInfo
 using OptimKit
 using TensorOperations
 using JLD2
+using TensorKitManifolds
+using TensorKit
 
 scalartype(x::Any) = scalartype(typeof(x))
 scalartype(T::Type{<:Number}) = T
