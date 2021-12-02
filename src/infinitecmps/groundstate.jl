@@ -811,6 +811,8 @@ function groundstate5(H::LocalHamiltonian, Ψ₀::UniformCMPS;
 
     δ = 1
     σ⁺ = [0. 1.; 0. 0.]
+    σᶻ = [1. 0.; 0. -1.]
+
     function retract(x, d, α)
         ΨL, ρR, = x
         QL = ΨL.Q
@@ -875,23 +877,26 @@ function groundstate5(H::LocalHamiltonian, Ψ₀::UniformCMPS;
         gradQ, gradRs = gradient(H, (ΨL, one(ρR), ρR), HL, one(HL); kwargs...)
 
         Q = ΨL.Q
-        D = Int(sqrt(size(Q[])[1]/2))
+        D = Int(sqrt(size(Q[])[1]/4))
         Rs = ΨL.Rs
 
         dK = 0.5*(gradQ - gradQ')
         dRs = gradRs .- (Rs) .* Ref(0.5*(gradQ + gradQ'))
 
-        Id = 1*Matrix(I,D,D)
+        Id2 = 1*Matrix(I,D,D)
+        Id = 1*Matrix(I,2,2)
         dR1 = dRs[1][]
         dR2 = dRs[2][]
-        dR1 = reshape(dR1,2,D,D,2,D,D)
+        dR1 = reshape(dR1,2,2,D,D,2,2,D,D)
+        @tensor dR1[a,b,c,d,e,f] := dR1[g,a,b,c,g,d,e,f]
         dR1 = dR1[1,:,:,2,:,:]
-        dR2 = reshape(dR2,2,D,D,2,D,D)
+        dR2 = reshape(dR2,2,2,D,D,2,2,D,D)
+        @tensor dR2[a,b,c,d,e,f] := σᶻ[g,h]*dR2[a,g,b,c,d,h,e,f]
         dR2 = dR2[1,:,:,2,:,:]
         @tensor dR1[a,b] := dR1[c,a,c,b]
         @tensor dR2[a,b] := dR2[a,c,b,c]
-        dR1 = Constant(kron(kron(dR1/D,Id),σ⁺))
-        dR2 = Constant(kron(kron(Id,dR2/D),σ⁺))
+        dR1 = Constant(kron(kron(kron(dR1/(2*D),Id2),σ⁺),Id))
+        dR2 = Constant(kron(kron(kron(Id2,dR2/(2*D)),σᶻ),σ⁺))
         dRs = (dR1,dR2)
 
         return E, (dK, dRs)
