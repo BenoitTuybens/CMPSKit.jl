@@ -877,6 +877,147 @@ function groundstate5(H::LocalHamiltonian, Ψ₀::UniformCMPS;
         gradQ, gradRs = gradient(H, (ΨL, one(ρR), ρR), HL, one(HL); kwargs...)
 
         Q = ΨL.Q
+        D = Int(size(Q[])[1]/2)
+        Rs = ΨL.Rs
+
+        dK = 0.5*(gradQ - gradQ')
+        dRs = gradRs .- (Rs) .* Ref(0.5*(gradQ + gradQ'))
+
+
+        dR1 = dRs[1][]
+        dR1 = reshape(dR1,2,D,2,D)
+        dR1 = dR1[1,:,2,:]
+        dR1 = Constant(kron(dR1,σ⁺))
+        dRs = (dR1,)
+
+        return E, (dK, dRs)
+    end
+    function scale!(d, α)
+        dK, dRs = d
+        rmul!(dK, α)
+        for dR in dRs
+            rmul!(dR, α)
+        end
+        return d
+    end
+    function add!(d1, d2, α)
+        dK1, dR1s = d1
+        dK2, dR2s = d2
+        axpy!(α, dK2, dK1)
+        for (dR1, dR2) in zip(dR1s, dR2s)
+            axpy!(α, dR2, dR1)
+        end
+        return d1
+    end
+    function _finalize!(x, E, d, numiter)
+        normgrad2 = real(inner(x, d, d))
+        @show normgrad2
+        δ = max(1e-12, 1e-3*normgrad2)
+        return finalize!(x, E, d, numiter)
+    end
+
+    ΨL₀ = Ψ₀
+    #ΨL₀, = leftgauge(Ψ₀; kwargs...)
+    ρR, λ, infoR = rightenv(ΨL₀; kwargs...)
+    ρL = one(ρR)
+    rmul!(ρR, 1/tr(ρR[]))
+    HL, E, e, hL, infoL = leftenv(H, (ΨL₀,ρL,ρR); kwargs...)
+    x = (ΨL₀, ρR, HL, E, e, hL)
+
+    # ρL, ρR, infoL, infoR = environments!(Ψ₀; eigalg = eigalg, linalg = linalg, kwargs...)
+    # rmul!(ρR, 1/tr(ρR[]))
+    # rmul!(ρL, 1/tr(ρL[]))
+    # HL, E, e, hL, infoL = leftenv(H, (Ψ₀,ρL,ρR); kwargs...)
+    # HR, E, e, hR, infoL = rightenv(H, (Ψ₀,ρL,ρR); kwargs...)
+    # x = (Ψ₀, ρL, ρR, HL, HR, E, e, hL, hR)
+
+    x, E, normgrad, numfg, history = optimize(fg, x, optalg; retract = retract,
+    #                            precondition = precondition,
+                                finalize! = _finalize!,
+                                inner = inner, transport! = transport!,
+                                scale! = scale!, add! = add!,
+                                isometrictransport = true)
+
+    (Ψ, ρR, HL, E, e, hL) = x
+    return Ψ, ρR, E, e, normgrad, numfg, history
+    #return optimtest(fg, x; retract = retract, inner = inner)
+end
+
+function groundstate5bis(H::LocalHamiltonian, Ψ₀::UniformCMPS;
+                        optalg = ConjugateGradient(; verbosity = 2, gradtol = 1e-7),
+                        eigalg = defaulteigalg(Ψ₀),
+                        linalg = defaultlinalg(Ψ₀),
+                        finalize! = OptimKit._finalize!,
+                        kwargs...)
+
+    δ = 1
+    σ⁺ = [0. 1.; 0. 0.]
+    σᶻ = [1. 0.; 0. -1.]
+
+    function retract(x, d, α)
+        ΨL, ρR, = x
+        QL = ΨL.Q
+        RLs = ΨL.Rs
+        KL = copy(QL)
+        for R in RLs
+            mul!(KL, R', R, +1/2, 1)
+        end
+
+        dK, dRs = d
+
+        RLs = RLs .+ α .* dRs
+        KL = KL + α * dK
+        QL = KL
+        for R in RLs
+            mul!(QL, R', R, -1/2, 1)
+        end
+
+        ΨL = InfiniteCMPS(QL, RLs; gauge = :left)
+        ρR, λ, infoR = rightenv(ΨL; eigalg = eigalg, linalg = linalg, kwargs...)
+        rmul!(ρR, 1/tr(ρR[]))
+        ρL = one(ρR)
+        HL, E, e, hL, infoL =
+            leftenv(H, (ΨL,ρL,ρR); eigalg = eigalg, linalg = linalg, kwargs...)
+
+        if infoR.converged == 0 || infoL.converged == 0
+            @warn "step $α : not converged, energy = $e"
+            @show infoR
+            @show infoL
+        end
+
+        return (ΨL, ρR, HL, E, e, hL), d
+    end
+
+    transport!(v, x, d, α, xnew) = v # simplest possible transport
+
+    function inner(x, d1, d2)
+        dK1, dR1 = d1
+        dK2, dR2 = d2
+        s = dK1 === dK2 ? 2*norm(dK1)^2 : 2*real(dot(dK1, dK2))
+        for (dR1,dR2) in zip(dR1, dR2)
+            if dR1 === dR2
+                s += 2*norm(dR1)^2
+            else
+                s += 2*real(dot(dR1, dR2))
+            end
+        end
+        return s
+    end
+
+    function precondition(x, d)
+        Ψ, ρR, = x
+        dK, dRs = d
+        #dQ = posreginv(ρL[0], δ) * dQ * posreginv(ρR[0], δ)
+        dRs = Ref(posreginv(ρL[0], δ)) .* dRs .* Ref(posreginv(ρR[0], δ))
+        return (dK, dRs)
+    end
+
+    function fg(x)
+        (ΨL, ρR, HL, E, e, hL) = x
+
+        gradQ, gradRs = gradient(H, (ΨL, one(ρR), ρR), HL, one(HL); kwargs...)
+
+        Q = ΨL.Q
         D = Int(sqrt(size(Q[])[1]/4))
         Rs = ΨL.Rs
 
@@ -940,16 +1081,16 @@ function groundstate5(H::LocalHamiltonian, Ψ₀::UniformCMPS;
     #HR, E, e, hR, infoL = rightenv(H, (Ψ₀,ρL,ρR); kwargs...)
     #x = (Ψ₀, ρL, ρR, HL, HR, E, e, hL, hR)
 
-    x, E, normgrad, numfg, history = optimize(fg, x, optalg; retract = retract,
-    #                            precondition = precondition,
-                                finalize! = _finalize!,
-                                inner = inner, transport! = transport!,
-                                scale! = scale!, add! = add!,
-                                isometrictransport = true)
-
-    (Ψ, ρR, HL, E, e, hL) = x
-    return Ψ, ρR, E, e, normgrad, numfg, history
-    #return optimtest(fg, x; retract = retract, inner = inner)
+    # x, E, normgrad, numfg, history = optimize(fg, x, optalg; retract = retract,
+    # #                            precondition = precondition,
+    #                             finalize! = _finalize!,
+    #                             inner = inner, transport! = transport!,
+    #                             scale! = scale!, add! = add!,
+    #                             isometrictransport = true)
+    #
+    # (Ψ, ρR, HL, E, e, hL) = x
+    # return Ψ, ρR, E, e, normgrad, numfg, history
+    return optimtest(fg, x; retract = retract, inner = inner)
 end
 
 function groundstate6(H::LocalHamiltonian, Ψ₀::UniformCMPS, V, Ss;
