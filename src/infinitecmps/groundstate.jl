@@ -1362,7 +1362,7 @@ function groundstate7(H::LocalHamiltonian, Ψ₀::UniformCMPS, V, Ss;
 
         dV_new = Unitary.project(arr2tm(dV),V)
 
-        gradQ = 0.5*(gradQ + gradQ')
+        #gradQ = 0.5*(gradQ + gradQ')
 
         return E, (dV_new, dSs, gradQ)
     end

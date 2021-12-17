@@ -10,10 +10,17 @@ using LinearAlgebra
 using JLD2
 using TensorOperations
 using Plots
+using QuadGK
+
+function f(x)
+    return (x^2-μ)/(2*pi)
+end
+
+
 
 D = 4
 k = 1.
-μ = (pi)^2
+μ = 5
 multiple = false
 
 σ⁺ = [0. 1.; 0. 0.]
@@ -66,3 +73,23 @@ end
 @show Q = Ψ.Q
 @show R1 = Ψ.Rs[1]
 @show expval(ψ[1]*ψ[1],Ψ)[]
+@show E, quadgk(f,-sqrt(μ),sqrt(μ))
+
+Λ = 1000.
+KL = Constant(randn(2*D,2*D))
+KL = 0.5*(KL-KL')
+R1 = Constant(randn(2*D,2*D))
+RLs = (R1,)
+QL = KL
+for R in RLs
+    mul!(QL, R', R, -1/2, 1)
+end
+Ψ = InfiniteCMPS(QL, (R1,); gauge = :left)
+h = k * (∂ψ[1]'*∂ψ[1]) - μ * (ψ[1]'*ψ[1]) + Λ * (ψ[1]'*ψ[1]'*ψ[1]*ψ[1])
+H = ∫(h, (-Inf,+Inf))
+Ψ, ρR, E, e, normgrad, numfg, history = groundstate(H, Ψ; optalg = alg1, linalg = GMRES(; tol = 1e-5))
+
+@show Q = Ψ.Q
+@show R1 = Ψ.Rs[1]
+@show expval(ψ[1]*ψ[1],Ψ)[]
+@show E, quadgk(f,-sqrt(μ),sqrt(μ))

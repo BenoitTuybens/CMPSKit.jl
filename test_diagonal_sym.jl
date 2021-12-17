@@ -43,8 +43,6 @@ alg1 = LBFGS(; verbosity = 2, maxiter = 1000000, gradtol = 1e-3);
 linalg = GMRES(krylovdim = 80; tol = 1e-5)
 
 Ψ, ρL, ρR, E, e, normgrad, numfg, history = groundstate7(H, Ψ, V, Ss; optalg = alg1, linalg = linalg)
-#αs,fs, dfs1, dfs2 = groundstate7(H, Ψ, V, Ss; optalg = alg1, linalg = linalg)
-#αs = (αs[1:end-1] + αs[2:end])/2
-#push!(αs,0.1)
-#display(plot(αs,[dfs1,dfs2]))
-#gui()
+# αs,fs, dfs1, dfs2 = groundstate7(H, Ψ, V, Ss; optalg = alg1, linalg = linalg)
+# display(plot(αs,[dfs1,dfs2]))
+# gui()
