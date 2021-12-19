@@ -16,12 +16,10 @@ function f(x)
     return (x^2-μ)/(2*pi)
 end
 
-
-
 D = 4
 k = 1.
-μ = 5
-multiple = false
+μ = 5.
+multiple = true
 
 σ⁺ = [0. 1.; 0. 0.]
 
@@ -34,7 +32,6 @@ if multiple
     R1 = Constant(kron(kron(kron(randn(D,D),Id2),σ⁺),Id))
     R2 = Constant(kron(kron(kron(Id2,randn(D,D)),σᶻ),σ⁺))
     RLs = (R1,R2)
-    Q = Constant(randn(2*D^2,2*D^2))
     QL = KL
     for R in RLs
         mul!(QL, R', R, -1/2, 1)
@@ -59,10 +56,10 @@ H = ∫(h, (-Inf,+Inf))
 alg1 = LBFGS(; verbosity = 2, maxiter = 1000000, gradtol = 1e-4);
 
 if multiple
-    #Ψ, ρR, E, e, normgrad, numfg, history = groundstate5bis(H, Ψ; optalg = alg1, linalg = GMRES(; tol = 1e-5))
-    αs,fs, dfs1, dfs2 = groundstate5bis(H, Ψ; optalg = alg1, linalg = GMRES(; tol = 1e-5))
-    display(plot(αs,[dfs1,dfs2]))
-    gui()
+    Ψ, ρR, E, e, normgrad, numfg, history = groundstate5bis(H, Ψ; optalg = alg1, linalg = GMRES(; tol = 1e-5))
+    # αs,fs, dfs1, dfs2 = groundstate5bis(H, Ψ; optalg = alg1, linalg = GMRES(; tol = 1e-5))
+    # display(plot(αs,[dfs1,dfs2]))
+    # gui()
 else
     Ψ, ρR, E, e, normgrad, numfg, history = groundstate5(H, Ψ; optalg = alg1, linalg = GMRES(; tol = 1e-5))
     #αs,fs, dfs1, dfs2 = groundstate5(H, Ψ; optalg = alg1, linalg = GMRES(; tol = 1e-5))
@@ -70,26 +67,26 @@ else
     #gui()
 end
 
-@show Q = Ψ.Q
-@show R1 = Ψ.Rs[1]
-@show expval(ψ[1]*ψ[1],Ψ)[]
-@show E, quadgk(f,-sqrt(μ),sqrt(μ))
+# @show Q = Ψ.Q
+# @show R1 = Ψ.Rs[1]
+# @show expval(ψ[1]*ψ[1],Ψ)[]
+# @show E, quadgk(f,-sqrt(μ),sqrt(μ))
 
-Λ = 1000.
-KL = Constant(randn(2*D,2*D))
-KL = 0.5*(KL-KL')
-R1 = Constant(randn(2*D,2*D))
-RLs = (R1,)
-QL = KL
-for R in RLs
-    mul!(QL, R', R, -1/2, 1)
-end
-Ψ = InfiniteCMPS(QL, (R1,); gauge = :left)
-h = k * (∂ψ[1]'*∂ψ[1]) - μ * (ψ[1]'*ψ[1]) + Λ * (ψ[1]'*ψ[1]'*ψ[1]*ψ[1])
-H = ∫(h, (-Inf,+Inf))
-Ψ, ρR, E, e, normgrad, numfg, history = groundstate(H, Ψ; optalg = alg1, linalg = GMRES(; tol = 1e-5))
-
-@show Q = Ψ.Q
-@show R1 = Ψ.Rs[1]
-@show expval(ψ[1]*ψ[1],Ψ)[]
-@show E, quadgk(f,-sqrt(μ),sqrt(μ))
+# Λ = 1000.
+# KL = Constant(randn(2*D,2*D))
+# KL = 0.5*(KL-KL')
+# R1 = Constant(randn(2*D,2*D))
+# RLs = (R1,)
+# QL = KL
+# for R in RLs
+#     mul!(QL, R', R, -1/2, 1)
+# end
+# Ψ = InfiniteCMPS(QL, (R1,); gauge = :left)
+# h = k * (∂ψ[1]'*∂ψ[1]) - μ * (ψ[1]'*ψ[1]) + Λ * (ψ[1]'*ψ[1]'*ψ[1]*ψ[1])
+# H = ∫(h, (-Inf,+Inf))
+# Ψ, ρR, E, e, normgrad, numfg, history = groundstate(H, Ψ; optalg = alg1, linalg = GMRES(; tol = 1e-5))
+#
+# @show Q = Ψ.Q
+# @show R1 = Ψ.Rs[1]
+# @show expval(ψ[1]*ψ[1],Ψ)[]
+# @show E, quadgk(f,-sqrt(μ),sqrt(μ))
