@@ -1081,16 +1081,16 @@ function groundstate5bis(H::LocalHamiltonian, Ψ₀::UniformCMPS;
     #HR, E, e, hR, infoL = rightenv(H, (Ψ₀,ρL,ρR); kwargs...)
     #x = (Ψ₀, ρL, ρR, HL, HR, E, e, hL, hR)
 
-    # x, E, normgrad, numfg, history = optimize(fg, x, optalg; retract = retract,
-    # #                            precondition = precondition,
-    #                             finalize! = _finalize!,
-    #                             inner = inner, transport! = transport!,
-    #                             scale! = scale!, add! = add!,
-    #                             isometrictransport = true)
-    #
-    # (Ψ, ρR, HL, E, e, hL) = x
-    # return Ψ, ρR, E, e, normgrad, numfg, history
-    return optimtest(fg, x; retract = retract, inner = inner)
+    x, E, normgrad, numfg, history = optimize(fg, x, optalg; retract = retract,
+    #                            precondition = precondition,
+                                finalize! = _finalize!,
+                                inner = inner, transport! = transport!,
+                                scale! = scale!, add! = add!,
+                                isometrictransport = true)
+
+    (Ψ, ρR, HL, E, e, hL) = x
+    return Ψ, ρR, E, e, normgrad, numfg, history
+    #return optimtest(fg, x; retract = retract, inner = inner)
 end
 
 function groundstate6(H::LocalHamiltonian, Ψ₀::UniformCMPS, V, Ss;
