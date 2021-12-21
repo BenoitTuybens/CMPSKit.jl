@@ -18,12 +18,12 @@ c = 1.5
 g = 2.
 Λ = 1000.
 gradienttest = false
-tensorproduct = false
+tensorproduct = true
 optimisation = true
 lagrangianmultiplier = false
 leftgauge = false
 Zueco = false
-diagonal = true
+diagonal = false
 
 if tensorproduct
     if leftgauge
@@ -159,12 +159,12 @@ if optimisation
         #αs = (αs[1:end-1] + αs[2:end])/2
         #push!(αs,0.1)
     elseif diagonal
-        Ψ, ρR, E, e, normgrad, numfg, history = groundstate6(H, Ψ, V, Ss; optalg = alg1, linalg = linalg)
-        #αs,fs, dfs1, dfs2 = groundstate6(H, Ψ, V, Ss; optalg = alg1, linalg = GMRES(; tol = 1e-5))
+        #Ψ, ρR, E, e, normgrad, numfg, history = groundstate6(H, Ψ, V, Ss; optalg = alg1, linalg = linalg)
+        αs,fs, dfs1, dfs2 = groundstate6(H, Ψ, V, Ss; optalg = alg1, linalg = GMRES(; tol = 1e-5))
         #αs = (αs[1:end-1] + αs[2:end])/2
         #push!(αs,0.1)
-        #display(plot(αs,[dfs1,dfs2]))
-        #gui()
+        display(plot(αs,[dfs1,dfs2]))
+        gui()
     else
         Ψ, ρR, E, e, normgrad, numfg, history = groundstate(H, Ψ; optalg = alg1, linalg = linalg)
         #αs,fs, dfs1, dfs2 = groundstate(H, Ψ; optalg = alg1, linalg = GMRES(; tol = 1e-5))
