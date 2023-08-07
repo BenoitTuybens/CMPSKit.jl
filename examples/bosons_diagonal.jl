@@ -146,30 +146,19 @@ end
 if optimisation
     if tensorproduct
         if leftgauge
-            Ψ, ρR, E, e, normgrad, numfg, history = groundstate4_unconstrained(H, Ψ; optalg = alg1, linalg = linalg)
-            #αs,fs, dfs1, dfs2 = groundstate4(H, Ψ; optalg = alg1, linalg = GMRES(; tol = 1e-5))
-            #αs = (αs[1:end-1] + αs[2:end])/2
-            #push!(αs,0.1)
-            #display(plot(αs,[dfs1,dfs2]))
-            #gui()
+            Ψ, ρR, E, e, normgrad, numfg, history = groundstate_tensprod_left(H, Ψ; optalg = alg1, linalg = linalg)
         else
-            Ψ, ρL, ρR, E, e, normgrad, numfg, history = groundstate3(H, Ψ; optalg = alg1, linalg = linalg)
+            Ψ, ρL, ρR, E, e, normgrad, numfg, history = groundstate_tensprod(H, Ψ; optalg = alg1, linalg = linalg)
         end
-        #αs,fs, dfs1, dfs2 = groundstate3(H, Ψ; optalg = alg1, linalg = GMRES(; tol = 1e-5))
-        #αs = (αs[1:end-1] + αs[2:end])/2
-        #push!(αs,0.1)
     elseif diagonal
-        #Ψ, ρR, E, e, normgrad, numfg, history = groundstate6(H, Ψ, V, Ss; optalg = alg1, linalg = linalg)
-        αs,fs, dfs1, dfs2 = groundstate6(H, Ψ, V, Ss; optalg = alg1, linalg = GMRES(; tol = 1e-5))
-        #αs = (αs[1:end-1] + αs[2:end])/2
-        #push!(αs,0.1)
-        display(plot(αs,[dfs1,dfs2]))
-        gui()
+        Ψ, ρR, E, e, normgrad, numfg, history = groundstate_diagonal(H, Ψ, V, Ss; optalg = alg1, linalg = linalg)
+        # αs,fs, dfs1, dfs2 = groundstate_diagonal(H, Ψ, V, Ss; optalg = alg1, linalg = GMRES(; tol = 1e-5))
+        # αs = (αs[1:end-1] + αs[2:end])/2
+        # push!(αs,0.1)
+        # display(plot(αs,[dfs1,dfs2]))
+        # gui()
     else
         Ψ, ρR, E, e, normgrad, numfg, history = groundstate(H, Ψ; optalg = alg1, linalg = linalg)
-        #αs,fs, dfs1, dfs2 = groundstate(H, Ψ; optalg = alg1, linalg = GMRES(; tol = 1e-5))
-        #αs = (αs[1:end-1] + αs[2:end])/2
-        #push!(αs,0.1)
     end
 
     @show Q = Ψ.Q

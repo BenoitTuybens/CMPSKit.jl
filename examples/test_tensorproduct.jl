@@ -46,15 +46,15 @@ h = k * (∂ψ[1]'*∂ψ[1] + ∂ψ[2]'*∂ψ[2]) - μ * (ψ[1]'*ψ[1] + ψ[2]'*
 H = ∫(h, (-Inf,+Inf))
 
 if leftgauge
-    Ψ, ρR, E, e, normgrad, numfg, history = groundstate4_unconstrained(H, Ψ; optalg = alg1, linalg = linalg)
-    #αs,fs, dfs1, dfs2 = groundstate4(H, Ψ; optalg = alg1, linalg = GMRES(; tol = 1e-5))
+    Ψ, ρR, E, e, normgrad, numfg, history = groundstate_tensprod_left(H, Ψ; optalg = alg1, linalg = linalg)
+    #αs,fs, dfs1, dfs2 = groundstate_tensprod(H, Ψ; optalg = alg1, linalg = GMRES(; tol = 1e-5))
     #αs = (αs[1:end-1] + αs[2:end])/2
     #push!(αs,0.1)
     #display(plot(αs,[dfs1,dfs2]))
     #gui()
 else
-    Ψ, ρL, ρR, E, e, normgrad, numfg, history = groundstate3(H, Ψ; optalg = alg1, linalg = linalg)
-    #αs,fs, dfs1, dfs2 = groundstate3(H, Ψ; optalg = alg1, linalg = GMRES(; tol = 1e-5))
+    Ψ, ρL, ρR, E, e, normgrad, numfg, history = groundstate_tensprod(H, Ψ; optalg = alg1, linalg = linalg)
+    #αs,fs, dfs1, dfs2 = groundstate_tensprod(H, Ψ; optalg = alg1, linalg = GMRES(; tol = 1e-5))
     #αs = (αs[1:end-1] + αs[2:end])/2
     #push!(αs,0.1)
 end
