@@ -3,7 +3,7 @@
 struct Piecewise{T,F<:FunctionSpace{T},S<:AbstractVector{<:Real}} <: AbstractPiecewise{T,F}
     nodes::S
     elements::Vector{F}
-    function Piecewise(nodes::S, elements::Vector{F}) where {T, F<:FunctionSpace{T}, S<:AbstractVector}
+    function Piecewise(nodes::S, elements::Vector{F}) where {T,F<:FunctionSpace{T},S<:AbstractVector}
         @assert length(nodes) == length(elements) + 1
         @assert eltype(nodes) <: Real
         if nodes isa AbstractRange
@@ -11,7 +11,7 @@ struct Piecewise{T,F<:FunctionSpace{T},S<:AbstractVector{<:Real}} <: AbstractPie
         else
             @assert issorted(nodes)
         end
-        return new{T, F, S}(nodes, elements)
+        return new{T,F,S}(nodes, elements)
     end
 end
 
@@ -37,7 +37,7 @@ function (p::Piecewise)(x)
     x == x₀ && return p[1](x)
     x == x₁ && return p[length(p)](x)
     if nodes isa AbstractRange
-        ir = (x-x₀)/step(nodes(p))
+        ir = (x - x₀) / step(nodes(p))
         i = floor(Int, ir)
         return p[i](x)
     else
@@ -50,14 +50,14 @@ end
 # Change number of coefficients
 function truncate!(p::Piecewise; kwargs...)
     for i = 1:length(p)
-        truncate!(p[i]; kwargs..., dx = (p.nodes[i+1]-p.nodes[i])/2)
+        truncate!(p[i]; kwargs..., dx=(p.nodes[i+1] - p.nodes[i]) / 2)
     end
     return p
 end
 
 # Special purpose constructor
 Base.similar(p::Piecewise, args...) =
-    Piecewise(nodes(p), map(x->similar(x, args...), elements(p)))
+    Piecewise(nodes(p), map(x -> similar(x, args...), elements(p)))
 Base.zero(p::Piecewise) = Piecewise(nodes(p), map(zero, elements(p)))
 Base.one(p::Piecewise) = Piecewise(nodes(p), map(one, elements(p)))
 
@@ -90,7 +90,7 @@ Base.:*(p1::AbstractPiecewise, p2::AbstractPiecewise) = truncmul(p1, p2)
 function truncmul(p1::AbstractPiecewise, p2::AbstractPiecewise; kwargs...)
     n = nodes(p1)
     @assert n == nodes(p2)
-    return Piecewise(n, [truncmul(p1[i], p2[i]; kwargs..., dx = n[i+1]-n[i]) for i = 1:length(p1)])
+    return Piecewise(n, [truncmul(p1[i], p2[i]; kwargs..., dx=n[i+1] - n[i]) for i = 1:length(p1)])
 end
 
 # Arithmetic (in place / mutating methods)
@@ -140,17 +140,17 @@ function LinearAlgebra.axpby!(α, px::AbstractPiecewise, β, py::Piecewise)
 end
 
 function truncmul!(p::Piecewise, p1::AbstractPiecewise, p2::AbstractPiecewise,
-                                α = true, β = false; kwargs...)
+    α=true, β=false; kwargs...)
     @assert nodes(p) == nodes(p1) == nodes(p2)
     n = nodes(p)
     @inbounds for i = 1:length(p)
-        truncmul!(p[i], p1[i], p2[i], α, β; kwargs..., dx = n[i+1]-n[i])
+        truncmul!(p[i], p1[i], p2[i], α, β; kwargs..., dx=n[i+1] - n[i])
     end
     return p
 end
 
 function LinearAlgebra.mul!(p::Piecewise, p1::AbstractPiecewise, p2::AbstractPiecewise,
-                                α = true, β = false)
+    α=true, β=false)
     @assert nodes(p) == nodes(p1) == nodes(p2)
     @inbounds for i = 1:length(p)
         mul!(p[i], p1[i], p2[i], α, β)
@@ -165,7 +165,7 @@ LinearAlgebra.norm(p::AbstractPiecewise) = sqrt(dot(p, p))
 
 # Differentiate and integrate
 differentiate(p::AbstractPiecewise) = Piecewise(nodes(p), map(differentiate, elements(p)))
-function integrate(p::AbstractPiecewise, interval = domain(p))
+function integrate(p::AbstractPiecewise, interval=domain(p))
     @assert interval == domain(p)
     s = integrate(p[1], (nodes(p)[1], nodes(p)[2]))
     for i = 2:length(p)
@@ -176,17 +176,17 @@ end
 
 # Apply linear and bilinear maps locally
 map_linear(φ, p::Piecewise; kwargs...) =
-    Piecewise(nodes(p), map(f->map_linear(φ, f; kwargs...), elements(p)))
+    Piecewise(nodes(p), map(f -> map_linear(φ, f; kwargs...), elements(p)))
 map_antilinear(φ, p::Piecewise; kwargs...) =
-    Piecewise(nodes(p), map(f->map_antilinear(φ, f; kwargs...), elements(p)))
+    Piecewise(nodes(p), map(f -> map_antilinear(φ, f; kwargs...), elements(p)))
 function map_bilinear(φ, p₁::AbstractPiecewise, p₂::AbstractPiecewise; kwargs...)
     nodes(p₁) == nodes(p₂) || throw(DomainMismatch())
-    els = map((f₁, f₂)->map_bilinear(φ, f₁, f₂; kwargs...), elements(p₁), elements(p₂))
+    els = map((f₁, f₂) -> map_bilinear(φ, f₁, f₂; kwargs...), elements(p₁), elements(p₂))
     return Piecewise(nodes(p₁), els)
 end
 function map_sesquilinear(φ, p₁::AbstractPiecewise, p₂::AbstractPiecewise; kwargs...)
     nodes(p₁) == nodes(p₂) || throw(DomainMismatch())
-    els = map((f₁, f₂)->map_sesquilinear(φ, f₁, f₂; kwargs...), elements(p₁), elements(p₂))
+    els = map((f₁, f₂) -> map_sesquilinear(φ, f₁, f₂; kwargs...), elements(p₁), elements(p₂))
     return Piecewise(nodes(p₁), els)
 end
 

@@ -2,8 +2,8 @@
 # SumOfTerms #
 ##############
 
-struct SumOfLocalTerms{N, T1<:NTuple{N,ScalarFunction},
-                            T2<:NTuple{N,LocalOperator}} <: LocalOperator
+struct SumOfLocalTerms{N,T1<:NTuple{N,ScalarFunction},
+    T2<:NTuple{N,LocalOperator}} <: LocalOperator
     coefficients::T1
     operators::T2
 end
@@ -23,8 +23,8 @@ Base.:+(op::LocalOperator) = SumOfLocalTerms((+1,), (op,))
 Base.:-(op::SumOfLocalTerms) = SumOfLocalTerms(.-(op.coefficients), op.operators)
 Base.:+(op::SumOfLocalTerms) = SumOfLocalTerms(.+(op.coefficients), op.operators)
 
-Base.:+(op1::LocalOperator, op2::LocalOperator) = SumOfLocalTerms((1,1), (op1, op2))
-Base.:-(op1::LocalOperator, op2::LocalOperator) = SumOfLocalTerms((1,-1), (op1, op2))
+Base.:+(op1::LocalOperator, op2::LocalOperator) = SumOfLocalTerms((1, 1), (op1, op2))
+Base.:-(op1::LocalOperator, op2::LocalOperator) = SumOfLocalTerms((1, -1), (op1, op2))
 Base.:+(op1::SumOfLocalTerms, op2::LocalOperator) =
     SumOfLocalTerms((op1.coefficients..., 1), (op1.operators..., op2))
 Base.:-(op1::SumOfLocalTerms, op2::LocalOperator) =
@@ -34,7 +34,7 @@ Base.:+(op1::LocalOperator, op2::SumOfLocalTerms) =
 Base.:-(op1::LocalOperator, op2::SumOfLocalTerms) = +(op1, -(op2))
 Base.:+(op1::SumOfLocalTerms, op2::SumOfLocalTerms) =
     SumOfLocalTerms((op1.coefficients..., op2.coefficients...),
-                    (op1.operators..., op2.operators...))
+        (op1.operators..., op2.operators...))
 Base.:-(op1::SumOfLocalTerms, op2::SumOfLocalTerms) = +(op1, -(op2))
 
 Base.:*(op1::SumOfLocalTerms, op2::LocalOperator) =

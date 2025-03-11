@@ -31,6 +31,9 @@ function LinearAlgebra.isapprox(x::FunctionSpace, y::FunctionSpace;
     return norm(x-y) <= max(atol, rtol*max(norm(x), norm(y)))
 end
 
+LinearAlgebra.normalize!(f::FunctionSpace) = rmul!(f, 1/norm(f))
+LinearAlgebra.normalize(f::FunctionSpace) = f/norm(f)
+
 # AbstractPiecewise
 abstract type AbstractPiecewise{T,F<:FunctionSpace{T}} <: FunctionSpace{T} end
 

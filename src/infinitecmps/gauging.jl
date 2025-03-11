@@ -1,10 +1,10 @@
 leftgauge(Ψ::UniformCMPS, args...; kwargs...) = leftgauge!(copy(Ψ), args...; kwargs...)
 rightgauge(Ψ::UniformCMPS, args...; kwargs...) = rightgauge!(copy(Ψ), args...; kwargs...)
 
-function leftgauge!(Ψ::UniformCMPS, C₀ = one(Ψ.Q);
-                    maxreorth = 10,
-                    eigalg = Arnoldi(; krylovdim = min(64, length(Ψ.Q[0]))),
-                    kwargs...)
+function leftgauge!(Ψ::UniformCMPS, C₀=one(Ψ.Q);
+    maxreorth=10,
+    eigalg=Arnoldi(; krylovdim=min(64, length(Ψ.Q[0]))),
+    kwargs...)
 
     U = one(Ψ.Q)
     if Ψ.gauge == :l
@@ -13,34 +13,34 @@ function leftgauge!(Ψ::UniformCMPS, C₀ = one(Ψ.Q);
         return Ψ, zero(scalartype(Ψ)), U, info
     end
     tol = eigalg.tol
-    ρL, λ, info = leftenv(Ψ, C₀'*C₀; eigalg = eigalg, kwargs...)
+    ρL, λ, info = leftenv(Ψ, C₀' * C₀; eigalg=eigalg, kwargs...)
     D, V = eigen!(Hermitian(ρL[]))
     Dsqrt = sqrt.(max.(D, defaulttol(D)))
-    _, C = qr!(Diagonal(Dsqrt)*V')
+    _, C = qr!(Diagonal(Dsqrt) * V')
     C ./= norm(C)
     CL = UpperTriangular(C)
 
-    Ψ.Q = Constant(rdiv!(CL*Ψ.Q[], CL))
+    Ψ.Q = Constant(rdiv!(CL * Ψ.Q[], CL))
     Qdiag = view(Ψ.Q[], diagind(Ψ.Q[]))
     Qdiag .-= λ
-    Ψ.Rs = map(R->Constant(rdiv!(CL*R[], CL)), Ψ.Rs)
+    Ψ.Rs = map(R -> Constant(rdiv!(CL * R[], CL)), Ψ.Rs)
     numreorth = 0
     η = norm(LeftTransfer(Ψ)(U))
     numiter = info.numiter
     numops = info.numops
     while η > tol
-        ρL, dλ, info = leftenv(Ψ, U; eigalg = eigalg, kwargs...)
+        ρL, dλ, info = leftenv(Ψ, U; eigalg=eigalg, kwargs...)
         numiter += info.numiter
         numops += info.numops
         D, V = eigen!(Hermitian(ρL[]))
         Dsqrt = sqrt.(max.(D, defaulttol(D)))
-        _, dC = qr!(Diagonal(Dsqrt)*V')
+        _, dC = qr!(Diagonal(Dsqrt) * V')
         dCL = UpperTriangular(dC)
 
-        Ψ.Q = Constant(rdiv!(dCL*Ψ.Q[], dCL))
+        Ψ.Q = Constant(rdiv!(dCL * Ψ.Q[], dCL))
         Qdiag = view(Ψ.Q[], diagind(Ψ.Q[]))
         Qdiag .-= dλ
-        Ψ.Rs = map(R->Constant(rdiv!(dCL*R[], dCL)), Ψ.Rs)
+        Ψ.Rs = map(R -> Constant(rdiv!(dCL * R[], dCL)), Ψ.Rs)
         λ += dλ
         C = lmul!(dCL, C)
         C ./= norm(C)
@@ -57,7 +57,7 @@ function leftgauge!(Ψ::UniformCMPS, C₀ = one(Ψ.Q);
     return Ψ, λ, Constant(C), ConvergenceInfo(converged, nothing, η, numiter, numops)
 end
 
-function rightgauge!(Ψ::UniformCMPS, C₀ = one(Ψ.Q); kwargs...)
+function rightgauge!(Ψ::UniformCMPS, C₀=one(Ψ.Q); kwargs...)
     if Ψ.gauge == :r
         U = one(Ψ.Q)
         η = norm(RightTransfer(Ψ)(U))

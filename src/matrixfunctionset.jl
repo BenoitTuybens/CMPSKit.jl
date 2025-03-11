@@ -14,7 +14,7 @@ struct DiagonalBosonicMatrices{N,T} < AbstractMatrixFunctionSet{N,Constant{Matri
     Rs::NTuple{N, Constant{Matrix{T}}}
 end
 
-function DiagonalBosonicMatrices(V::Matrix, Es::NTuple{N,Vector)
+function DiagonalBosonicMatrices(V::Matrix, Es::NTuple{N,Vector})
     iV = inv(V)
     Rs = Constant.( (V,) .* Diagonal.(Es) .* (iV,) )
     return DiagonalBosonicMatrices(V, iV, Es, Rs)

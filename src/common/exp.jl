@@ -52,6 +52,7 @@ function exp_blocktriangular!(A::StridedMatrix{T}, B::StridedMatrix{T}, C::Strid
         end
         AUpV, AVmU, BUpV, BVmU, CUpV, CVmU = exp_blocktriangular_pade13(A, B, C)
      end
+
      AF = lu!(AVmU)
      XA = ldiv!(AF, AUpV)
      XC = AeqC ? XA : ldiv!(lu!(CVmU), CUpV)
@@ -358,22 +359,22 @@ end
 
 ## Swap rows i and j and columns i and j in X
 function _rcswap!(X::StridedMatrix, i::Integer, j::Integer)
-    for k = 1:size(X,1)
+    for k = axes(X, 1)
         X[k,i], X[k,j] = X[k,j], X[k,i]
     end
-    for k = 1:size(X,2)
+    for k = axes(X, 2)
         X[i,k], X[j,k] = X[j,k], X[i,k]
     end
     return X
 end
 function _rswap!(X::StridedMatrix, i::Integer, j::Integer)
-    for k = 1:size(X,2)
+    for k = axes(X, 2)
         X[i,k], X[j,k] = X[j,k], X[i,k]
     end
     return X
 end
 function _cswap!(X::StridedMatrix, i::Integer, j::Integer)
-    for k = 1:size(X,1)
+    for k = axes(X, 1)
         X[k,i], X[k,j] = X[k,j], X[k,i]
     end
     return X
