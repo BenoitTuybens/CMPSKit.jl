@@ -2,10 +2,9 @@ leftgauge(Ψ::UniformCMPS, args...; kwargs...) = leftgauge!(copy(Ψ), args...; k
 rightgauge(Ψ::UniformCMPS, args...; kwargs...) = rightgauge!(copy(Ψ), args...; kwargs...)
 
 function leftgauge!(Ψ::UniformCMPS, C₀=one(Ψ.Q);
-    maxreorth=10,
-    eigalg=Arnoldi(; krylovdim=min(64, length(Ψ.Q[0]))),
-    kwargs...)
-
+                    maxreorth=10,
+                    eigalg=Arnoldi(; krylovdim=min(64, length(Ψ.Q[0]))),
+                    kwargs...)
     U = one(Ψ.Q)
     if Ψ.gauge == :l
         η = norm(LeftTransfer(Ψ)(U))
@@ -66,13 +65,13 @@ function rightgauge!(Ψ::UniformCMPS, C₀=one(Ψ.Q); kwargs...)
     end
     _adjoint!(Ψ.Q[])
     foreach(Ψ.Rs) do R
-        _adjoint!(R[])
+        return _adjoint!(R[])
     end
     Ψ.gauge = :n
     _, λ, C, info = leftgauge!(Ψ, C₀'; kwargs...)
     _adjoint!(Ψ.Q[])
     foreach(Ψ.Rs) do R
-        _adjoint!(R[])
+        return _adjoint!(R[])
     end
     _adjoint!(C[])
     if Ψ.gauge == :l

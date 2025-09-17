@@ -1,9 +1,9 @@
-function environment(Ψ₁::CircularCMPS, Ψ₂::CircularCMPS = Ψ₁; kwargs...)
+function environment(Ψ₁::CircularCMPS, Ψ₂::CircularCMPS=Ψ₁; kwargs...)
     period(Ψ₁) == period(Ψ₂) || throw(DomainMismatch())
 
     T = _full(RightTransfer(Ψ₁, Ψ₂); kwargs...)
     if T isa Constant
-        return Constant(exp(period(Ψ₁)*T[]))
+        return Constant(exp(period(Ψ₁) * T[]))
     else
         # TODO
         # idea: use Floquet
@@ -18,7 +18,7 @@ function environment(Ψ₁::CircularCMPS, Ψ₂::CircularCMPS = Ψ₁; kwargs...
     end
 end
 
-function environment(H::LocalHamiltonian, Ψ₁::CircularCMPS, Ψ₂::CircularCMPS = Ψ₁; kwargs...)
+function environment(H::LocalHamiltonian, Ψ₁::CircularCMPS, Ψ₂::CircularCMPS=Ψ₁; kwargs...)
     period(Ψ₁) == period(Ψ₂) || throw(DomainMismatch())
     L = period(Ψ₁)
 

@@ -15,13 +15,13 @@ function leftreducedoperator(op::FieldOperator, Ψ::LinearCMPS, ρL=nothing; kwa
     if isnothing(ρL)
         ρL = leftenv(Ψ; kwargs...)
     end
-    _leftreducedoperator(op, Ψ.Q, Ψ.Rs, ρL)
+    return _leftreducedoperator(op, Ψ.Q, Ψ.Rs, ρL)
 end
 function rightreducedoperator(op::FieldOperator, Ψ::LinearCMPS, ρR=nothing; kwargs...)
     if isnothing(ρR)
         ρR = rightenv(Ψ; kwargs...)
     end
-    _rightreducedoperator(op, Ψ.Q, Ψ.Rs, ρR)
+    return _rightreducedoperator(op, Ψ.Q, Ψ.Rs, ρR)
 end
 
 function _leftreducedoperator(op::FieldOperator, Q, Rs, ρL)
@@ -101,7 +101,8 @@ function localgradientQ(op::FieldOperator, Ψ::LinearCMPS, ρL=nothing, ρR=noth
     end
     return _brafactor_cotangentQ(op, Ψ.Q, Ψ.Rs)(ρL * _ketfactor(op, Ψ.Q, Ψ.Rs) * ρR)
 end
-function localgradientRs(op::FieldOperator, Ψ::LinearCMPS, ρL=nothing, ρR=nothing; kwargs...)
+function localgradientRs(op::FieldOperator, Ψ::LinearCMPS, ρL=nothing, ρR=nothing;
+                         kwargs...)
     if isnothing(ρL)
         ρL, = leftenv(Ψ; kwargs...)
     end
@@ -110,7 +111,8 @@ function localgradientRs(op::FieldOperator, Ψ::LinearCMPS, ρL=nothing, ρR=not
     end
     return _brafactor_cotangentRs(op, Ψ.Q, Ψ.Rs)(ρL * _ketfactor(op, Ψ.Q, Ψ.Rs) * ρR)
 end
-function localgradient∂Rs(op::FieldOperator, Ψ::LinearCMPS, ρL=nothing, ρR=nothing; kwargs...)
+function localgradient∂Rs(op::FieldOperator, Ψ::LinearCMPS, ρL=nothing, ρR=nothing;
+                          kwargs...)
     if isnothing(ρL)
         ρL, = leftenv(Ψ; kwargs...)
     end

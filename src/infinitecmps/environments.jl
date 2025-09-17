@@ -1,17 +1,18 @@
 defaulteigalg(Ψ::UniformCMPS) = Arnoldi(; krylovdim=min(256, virtualdim(Ψ)^2))
 defaultlinalg(Ψ::UniformCMPS) = GMRES(; krylovdim=min(256, virtualdim(Ψ)^2))
 
-defaulteigalg(Ψ::FourierCMPS) =
-    Arnoldi(; krylovdim=min(256, (10 * nummodes(Ψ.Q) + 1) * virtualdim(Ψ)^2))
-defaultlinalg(Ψ::FourierCMPS) =
-    GMRES(; krylovdim=min(256, (10 * nummodes(Ψ.Q) + 1) * virtualdim(Ψ)^2))
+function defaulteigalg(Ψ::FourierCMPS)
+    return Arnoldi(; krylovdim=min(256, (10 * nummodes(Ψ.Q) + 1) * virtualdim(Ψ)^2))
+end
+function defaultlinalg(Ψ::FourierCMPS)
+    return GMRES(; krylovdim=min(256, (10 * nummodes(Ψ.Q) + 1) * virtualdim(Ψ)^2))
+end
 
 # CMPS environements
 function leftenv(Ψ::InfiniteCMPS, ρ₀=one(Ψ.Q);
-    eigalg=defaulteigalg(Ψ),
-    linalg=nothing, # ignored
-    kwargs...)
-
+                 eigalg=defaulteigalg(Ψ),
+                 linalg=nothing, # ignored
+                 kwargs...)
     eigsort = EigSorter(x -> (abs(div(imag(x), pi / period(Ψ))), -real(x)))
     let TL = LeftTransfer(Ψ)
         _, ρs, λs, info = schursolve(ρ₀, 1, eigsort, eigalg) do x
@@ -38,10 +39,9 @@ function leftenv!(Ψ::InfiniteCMPS, ρ₀=one(Ψ.Q); kwargs...)
 end
 
 function rightenv(Ψ::InfiniteCMPS, ρ₀=one(Ψ.Q);
-    eigalg=defaulteigalg(Ψ),
-    linalg=nothing, # ignored
-    kwargs...)
-
+                  eigalg=defaulteigalg(Ψ),
+                  linalg=nothing, # ignored
+                  kwargs...)
     eigsort = EigSorter(x -> (abs(div(imag(x), pi / period(Ψ))), -real(x)))
     let TR = RightTransfer(Ψ)
         _, ρs, λs, info = schursolve(ρ₀, 1, eigsort, eigalg) do x
@@ -104,10 +104,9 @@ end
 
 # assumes Ψ is normalized and ⟨ρL|ρR⟩ = 1
 function leftenv(H::LocalHamiltonian, Ψρs::InfiniteCMPSData, HL₀=nothing;
-    eigalg=nothing, # ignored
-    linalg=defaultlinalg(Ψρs[1]),
-    kwargs...)
-
+                 eigalg=nothing, # ignored
+                 linalg=defaultlinalg(Ψρs[1]),
+                 kwargs...)
     Ψ, ρL, ρR = Ψρs
     domain(H) == domain(Ψ) || throw(DomainMismatch())
 
@@ -125,21 +124,21 @@ function leftenv(H::LocalHamiltonian, Ψρs::InfiniteCMPSData, HL₀=nothing;
         HL, infoL = linsolve(hL / norm(hL), HL₀, linalg) do x
             y = ∂(x) - TL(x; kwargs...)
             y = axpy!(dot(ρR, x), ρL, y)
-            truncate!(y; tol=linalg.tol / 100, kwargs...)
+            return truncate!(y; tol=linalg.tol / 100, kwargs...)
         end
         HL = rmul!(HL + HL', 0.5 * norm(hL))
         # truncate!(HL; tol = linalg.tol/100, kwargs...)
         res = hL - (∂(HL) - TL(HL))
-        infoL = ConvergenceInfo(infoL.converged, res, norm(res), infoL.numiter, infoL.numops)
+        infoL = ConvergenceInfo(infoL.converged, res, norm(res), infoL.numiter,
+                                infoL.numops)
         return HL, EL, eL, hL, infoL
     end
 end
 
 function rightenv(H::LocalHamiltonian, Ψρs::InfiniteCMPSData, HR₀=nothing;
-    eigalg=nothing, # ignored
-    linalg=defaultlinalg(Ψρs[1]),
-    kwargs...)
-
+                  eigalg=nothing, # ignored
+                  linalg=defaultlinalg(Ψρs[1]),
+                  kwargs...)
     Ψ, ρL, ρR = Ψρs
     domain(H) == domain(Ψ) || throw(DomainMismatch())
 
@@ -157,13 +156,14 @@ function rightenv(H::LocalHamiltonian, Ψρs::InfiniteCMPSData, HR₀=nothing;
         HR, infoR = linsolve(hR / norm(hR), HR₀, linalg) do x
             y = -∂(x) - TR(x; kwargs...)
             y = axpy!(dot(ρL, x), ρR, y)
-            truncate!(y; tol=linalg.tol / 100, kwargs...)
+            return truncate!(y; tol=linalg.tol / 100, kwargs...)
         end
         HR = rmul!(HR + HR', 0.5 * norm(hR))
         # res = hR - (-∂(HR)-TR(HR))
         # truncate!(HR; tol = linalg.tol/100, kwargs...)
         res = hR - (-∂(HR) - TR(HR))
-        infoR = ConvergenceInfo(infoR.converged, res, norm(res), infoR.numiter, infoR.numops)
+        infoR = ConvergenceInfo(infoR.converged, res, norm(res), infoR.numiter,
+                                infoR.numops)
         return HR, ER, eR, hR, infoR
     end
 end
@@ -175,7 +175,7 @@ function environments!(H::LocalHamiltonian, Ψ::InfiniteCMPS; kwargs...)
 end
 
 function environments(H::LocalHamiltonian, Ψρs::InfiniteCMPSData,
-    HL₀=nothing, HR₀=nothing; kwargs...)
+                      HL₀=nothing, HR₀=nothing; kwargs...)
     HL, EL, eL, hL, infoHL = leftenv(H, Ψρs, HL₀; kwargs...)
     HR, ER, eR, hR, infoHR = rightenv(H, Ψρs, HR₀; kwargs...)
     eL ≈ eR ||

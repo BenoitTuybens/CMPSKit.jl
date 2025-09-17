@@ -5,7 +5,7 @@ struct CircularCMPSExcitationSpace{T<:MatrixFunction,N,S}
     Rs::NTuple{N,T}
 end
 
-const UniformCircularCMPSExcitationSpace{A, N} = CircularCMPSExcitationSpace{Constant{A}, N}
+const UniformCircularCMPSExcitationSpace{A,N} = CircularCMPSExcitationSpace{Constant{A},N}
 
 # function InfiniteCMPSExcitationSpace(momentum, ΨL::State, ΨR::State = ΨL; kwargs...) where {State<:UniformCMPS}
 #     topo = !(ΨL === ΨR)
@@ -178,8 +178,6 @@ const UniformCircularCMPSExcitationSpace{A, N} = CircularCMPSExcitationSpace{Con
 # end
 #
 
-
-
 """
 `tangent_space_metric(Ψ::UniformCircularCMPS)`
 
@@ -200,17 +198,18 @@ function excitation_metric(space::UniformCircularCMPSExcitationSpace; kwargs...)
     Q, Rs = space.Q, space.Rs
     k = space.momentum
     L = space.period
-    p = 2*pi*k/L
+    p = 2 * pi * k / L
     T = _full(RightTransfer(Q, Rs); kwargs...)
-    T1 = L*T[]
-    T2 = iszero(p) ? T1 : axpy!(-im*p, one(T[]), L*T[])
+    T1 = L * T[]
+    T2 = iszero(p) ? T1 : axpy!(-im * p, one(T[]), L * T[])
     E1_, E2_, Eenv = exp_blocktriangular_lazy!(T1, T2)
     # Z = real(tr(E_)) # norm(Ψ)^2 = ⟨Ψ|Ψ⟩
     E = Constant(E1_)
     function metric(V, Ws)
         D = size(V[], 1)
         GWs = map(Ws) do W
-            map_linear(x->permutedims(partialtrace1(x, D, D)), map_bilinear(⊗, W, one(W)) * E)
+            return map_linear(x -> permutedims(partialtrace1(x, D, D)),
+                              map_bilinear(⊗, W, one(W)) * E)
         end
 
         VWs = map_bilinear(⊗, V, one(V))
@@ -221,10 +220,10 @@ function excitation_metric(space::UniformCircularCMPSExcitationSpace; kwargs...)
         # Ψoverlap = tr(EVWs[]) # ⟨Ψ|Φ(V,W)⟩
         # EVWs = axpy!(-Ψoverlap/Z, E, EVWs)
 
-        GV = map_linear(x->permutedims(partialtrace1(x, D, D)), EVWs)
+        GV = map_linear(x -> permutedims(partialtrace1(x, D, D)), EVWs)
         for (R, GW) in zip(Rs, GWs)
             R1 = map_bilinear(⊗, R, one(R))
-            axpy!(1, map_linear(x->permutedims(partialtrace1(x, D, D)), EVWs*R1), GW)
+            axpy!(1, map_linear(x -> permutedims(partialtrace1(x, D, D)), EVWs * R1), GW)
         end
 
         # return rmul!(GV, 1/Z), rmul!.(GWs, 1/Z)

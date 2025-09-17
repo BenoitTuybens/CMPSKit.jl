@@ -1,5 +1,5 @@
 function gradient(H::LocalHamiltonian, Ψρs::InfiniteCMPSData, HL=nothing, HR=nothing;
-    kwargs...)
+                  kwargs...)
     Ψ, ρL, ρR = Ψρs
     if isnothing(HL)
         HL, = leftenv(H, Ψρs; kwargs...)
@@ -47,7 +47,7 @@ function gradient(H::LocalHamiltonian, Ψρs::InfiniteCMPSData, HL=nothing, HR=n
 end
 
 function centergradient(H::LocalHamiltonian, ΨLRC, HL=nothing, HR=nothing;
-    kwargs...)
+                        kwargs...)
     ΨL, ΨR, C = ΨLRC
     if isnothing(HL)
         HL, = leftenv(H, (ΨL, one(C), C * C'); kwargs...)

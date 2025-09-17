@@ -3,8 +3,9 @@ struct LocalHamiltonian{O<:SumOfLocalTerms,S<:Real}
     domain::Tuple{S,S}
 end
 
-∫(o::SumOfLocalTerms, domain::Tuple{<:Real,<:Real}) =
-    LocalHamiltonian(o, promote(domain...))
+function ∫(o::SumOfLocalTerms, domain::Tuple{<:Real,<:Real})
+    return LocalHamiltonian(o, promote(domain...))
+end
 
 ∫(o::LocalOperator, domain::Tuple{<:Real,<:Real}) = ∫(1 * o, domain)
 

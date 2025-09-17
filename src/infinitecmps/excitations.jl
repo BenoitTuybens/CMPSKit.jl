@@ -8,7 +8,9 @@ struct InfiniteCMPSExcitationSpace{T,N,S}
     ρL::T
     C::T
     topological::Bool
-    function InfiniteCMPSExcitationSpace(p::S, QL::T, RLs::NTuple{N,T}, QR::T, RRs::NTuple{N,T}, ρR::T, ρL::T, C::T, topo::Bool) where {S,T,N}
+    function InfiniteCMPSExcitationSpace(p::S, QL::T, RLs::NTuple{N,T}, QR::T,
+                                         RRs::NTuple{N,T}, ρR::T, ρL::T, C::T,
+                                         topo::Bool) where {S,T,N}
         C = normalize!(C)
         @assert norm(QL + QL' + sum(adjoint.(RLs) .* RLs)) < defaulttol(C)
         @assert norm(QR + QR' + sum(RRs .* adjoint.(RRs))) < defaulttol(C)
@@ -16,8 +18,8 @@ struct InfiniteCMPSExcitationSpace{T,N,S}
             @show QL * C - C * QR
             @assert QL * C ≈ C * QR
             @assert all(RLs .* Ref(C) .≈ Ref(C) .* RRs)
-            @assert ρR ≈ C*C'
-            @assert ρL ≈ C'*C
+            @assert ρR ≈ C * C'
+            @assert ρL ≈ C' * C
         end
         return new{T,N,S}(p, QL, RLs, QR, RRs, ρR, ρL, C, topo)
     end
@@ -27,17 +29,18 @@ struct InfiniteCMPSExcitation{T,N,S}
     space::InfiniteCMPSExcitationSpace{T,N,S}
 end
 
-function InfiniteCMPSExcitationSpace(momentum, ΨL::State, ΨR::State = ΨL; kwargs...) where {State<:UniformCMPS}
+function InfiniteCMPSExcitationSpace(momentum, ΨL::State, ΨR::State=ΨL;
+                                     kwargs...) where {State<:UniformCMPS}
     topo = !(ΨL === ΨR)
 
     ΨL, λL, CL = leftgauge(ΨL; kwargs...)
     ΨR, λR, CR = rightgauge(ΨR; kwargs...)
 
-    C = CL*CR # even if topo, the following initial guesses for ρL and ρR are probably good
-    ρR, = rightenv(ΨL, C*C'; kwargs...)
-    ρR = rmul!(ρR, 1/tr(ρR)[])
-    ρL, = leftenv(ΨR, C'*C; kwargs...)
-    ρL = rmul!(ρL, 1/tr(ρL)[])
+    C = CL * CR # even if topo, the following initial guesses for ρL and ρR are probably good
+    ρR, = rightenv(ΨL, C * C'; kwargs...)
+    ρR = rmul!(ρR, 1 / tr(ρR)[])
+    ρL, = leftenv(ΨR, C' * C; kwargs...)
+    ρL = rmul!(ρL, 1 / tr(ρL)[])
 
     QL, RLs = ΨL.Q, ΨL.Rs
     QR, RRs = ΨR.Q, ΨR.Rs
@@ -49,29 +52,32 @@ function InfiniteCMPSExcitationSpace(momentum, ΨL::State, ΨR::State = ΨL; kwa
     return InfiniteCMPSExcitationSpace(p, QL, RLs, QR, RRs, ρR, ρL, C, topo)
 end
 
-function InfiniteCMPSExcitation(momentum, V, Ws, ΨL::State, ΨR::State) where {State<:UniformCMPS}
+function InfiniteCMPSExcitation(momentum, V, Ws, ΨL::State,
+                                ΨR::State) where {State<:UniformCMPS}
     # TODO
 end
 
+const UniformCMPSExcitationSpace{A<:AbstractMatrix,N} = InfiniteCMPSExcitationSpace{<:Constant{A},
+                                                                                    N}
 
-const UniformCMPSExcitationSpace{A<:AbstractMatrix,N} = InfiniteCMPSExcitationSpace{<:Constant{A},N}
-
-
-function excitation_operator(Ĥ::LocalHamiltonian, space::UniformCMPSExcitationSpace; kwargs...)
-    ΨL = InfiniteCMPS(space.QL, space.RLs; gauge = :l)
+function excitation_operator(Ĥ::LocalHamiltonian, space::UniformCMPSExcitationSpace;
+                             kwargs...)
+    ΨL = InfiniteCMPS(space.QL, space.RLs; gauge=:l)
     ρR = space.ρR
-    ΨR = InfiniteCMPS(space.QL, space.RLs; gauge = :r)
+    ΨR = InfiniteCMPS(space.QL, space.RLs; gauge=:r)
     ρL = space.ρL
 
-    HL, eL,_ = leftenv(Ĥ, (ΨL, one(ρR), ρR); kwargs...)
-    HR, eR,_ = rightenv(Ĥ, (ΨR, ρL, one(ρL)); kwargs...)
+    HL, eL, _ = leftenv(Ĥ, (ΨL, one(ρR), ρR); kwargs...)
+    HR, eR, _ = rightenv(Ĥ, (ΨR, ρL, one(ρL)); kwargs...)
     if !(abs(eL - eR) < defaulttol(ΨL))
         error("left and right ground state in excitation space have different expectation value for the given operator: $eL and $eR")
     end
-    e = (eL + eR)/2
+    e = (eL + eR) / 2
 
-    Heff = let QL = space.QL, RLs = space.RLs, QR = space.QR, RRs = space.RRs, p = space.momentum,
-                HL = HL, HR = HR, TLR = RightTransfer(ΨL, ΨR), TRL = LeftTransfer(ΨR, ΨL)
+    Heff = let QL = space.QL, RLs = space.RLs, QR = space.QR, RRs = space.RRs,
+        p = space.momentum,
+        HL = HL, HR = HR, TLR = RightTransfer(ΨL, ΨR), TRL = LeftTransfer(ΨR, ΨL)
+
         function (Xs)
             if !iszero(p)
                 @assert scalartype(first(Xs)) <: Complex
@@ -93,11 +99,15 @@ function excitation_operator(Ĥ::LocalHamiltonian, space::UniformCMPSExcitation
             # local terms: ket and bra excitations acting on local Hamiltonian terms
             for (coeff, op) in zip(coefficients(Ĥ.h), operators(Ĥ.h))
                 op_ket = _ketfactor_tangent(op, QL, RLs, V, Ws, ∂Ws, QR, RRs)
-                HWs = axpy!.(Ref(coeff), _brafactor_cotangentRs(op, QL, RLs, QR, RRs)(op_ket), HWs)
+                HWs = axpy!.(Ref(coeff),
+                             _brafactor_cotangentRs(op, QL, RLs, QR, RRs)(op_ket), HWs)
                 if op isa ContainsDifferentiatedCreation
-                    HV = axpy!(coeff, _brafactor_cotangentQ(op, QL, RLs, QR, RRs)(op_ket), HV)
+                    HV = axpy!(coeff, _brafactor_cotangentQ(op, QL, RLs, QR, RRs)(op_ket),
+                               HV)
                     if !iszero(p)
-                        HWs = axpy!.(Ref(-im*p*coeff), _brafactor_cotangent∂Rs(op, QL, RLs, QR, RRs)(op_ket), HWs)
+                        HWs = axpy!.(Ref(-im * p * coeff),
+                                     _brafactor_cotangent∂Rs(op, QL, RLs, QR, RRs)(op_ket),
+                                     HWs)
                     end
                 end
             end
@@ -110,7 +120,7 @@ function excitation_operator(Ĥ::LocalHamiltonian, space::UniformCMPSExcitation
 
             # non-local contributions
             # gL: ket excitation on Hamiltonian + (Hamiltonian -> transfer -> ket excitation)
-            gL = HL*V
+            gL = HL * V
             Xtemp = zero(V)
             for (RL, W) in zip(RLs, Ws)
                 Xtemp = mul!(Xtemp, HL, W)
@@ -134,36 +144,36 @@ function excitation_operator(Ĥ::LocalHamiltonian, space::UniformCMPSExcitation
                 GR, = linsolve(-gR, zero(gR); kwargs...) do x
                     y = TLR(x)
                     if !iszero(p)
-                        y = axpy!(im*p, x, y)
+                        y = axpy!(im * p, x, y)
                     end
                 end
 
                 GL, = linsolve(-gL, zero(gL); kwargs...) do x
                     y = TRL(x)
                     if !iszero(p)
-                        y = axpy!(-im*p, x, y)
+                        y = axpy!(-im * p, x, y)
                     end
                 end
             else
-                gR = axpy!(-tr(C'*gR)[], C, gR) # tr should be zero by construction of V and W
+                gR = axpy!(-tr(C' * gR)[], C, gR) # tr should be zero by construction of V and W
                 GR, = linsolve(-gR, zero(gR); kwargs...) do x
                     y = TLR(x)
                     if !iszero(p)
-                        y = axpy!(im*p, x, y)
+                        y = axpy!(im * p, x, y)
                     end
-                    y = axpy!(tr(C'*x)[], C, y)
+                    return y = axpy!(tr(C' * x)[], C, y)
                 end
-                GR = axpy!(-tr(C'*GR)[], C, GR) # tr should be zero anyway
+                GR = axpy!(-tr(C' * GR)[], C, GR) # tr should be zero anyway
 
-                gL = axpy!(-tr(gL*C')[], C, gL) # tr should be zero for good ground state approximation with normgrad ≈ 0
+                gL = axpy!(-tr(gL * C')[], C, gL) # tr should be zero for good ground state approximation with normgrad ≈ 0
                 GL, = linsolve(-gL, zero(gL); kwargs...) do x
                     y = TRL(x)
                     if !iszero(p)
-                        y = axpy!(-im*p, x, y)
+                        y = axpy!(-im * p, x, y)
                     end
-                    y = axpy!(tr(x*C')[], C, y)
+                    return y = axpy!(tr(x * C')[], C, y)
                 end
-                GL = axpy!(-tr(GL*C')[], C, GL)
+                GL = axpy!(-tr(GL * C')[], C, GL)
             end
 
             # Contributions of GL
@@ -177,11 +187,15 @@ function excitation_operator(Ĥ::LocalHamiltonian, space::UniformCMPSExcitation
             for (coeff, op) in zip(coefficients(Ĥ.h), operators(Ĥ.h))
                 op_ket = _ketfactor(op, QL, RLs)
                 Xtemp = mul!(Xtemp, op_ket, GR)
-                HWs = axpy!.(Ref(coeff), _brafactor_cotangentRs(op, QL, RLs, QR, RRs)(Xtemp), HWs)
+                HWs = axpy!.(Ref(coeff),
+                             _brafactor_cotangentRs(op, QL, RLs, QR, RRs)(Xtemp), HWs)
                 if op isa ContainsDifferentiatedCreation
-                    HV = axpy!(coeff, _brafactor_cotangentQ(op, QL, RLs, QR, RRs)(Xtemp), HV)
+                    HV = axpy!(coeff, _brafactor_cotangentQ(op, QL, RLs, QR, RRs)(Xtemp),
+                               HV)
                     if !iszero(p)
-                        HWs = axpy!.(Ref(-im*p*coeff), _brafactor_cotangent∂Rs(op, QL, RLs, QR, RRs)(Xtemp), HWs)
+                        HWs = axpy!.(Ref(-im * p * coeff),
+                                     _brafactor_cotangent∂Rs(op, QL, RLs, QR, RRs)(Xtemp),
+                                     HWs)
                     end
                 end
             end

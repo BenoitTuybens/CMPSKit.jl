@@ -1,26 +1,28 @@
 using Printf
 
 # groundstate with UniformCMPS
-groundstate(Ĥ::LocalHamiltonian, Ψ₀::UniformCMPS; kwargs...) =
-    groundstate_unconstrained(Ĥ, Ψ₀; kwargs...)
+function groundstate(Ĥ::LocalHamiltonian, Ψ₀::UniformCMPS; kwargs...)
+    return groundstate_unconstrained(Ĥ, Ψ₀; kwargs...)
+end
 
-groundstate(Ĥ::LocalHamiltonian, Ψ₀::UniformCMPS, n₀::Number; kwargs...) =
-    groundstate_constrained(Ĥ, Ψ₀, ntuple(k -> n₀, Val(length(Ψ₀.Rs))); kwargs...)
+function groundstate(Ĥ::LocalHamiltonian, Ψ₀::UniformCMPS, n₀::Number; kwargs...)
+    return groundstate_constrained(Ĥ, Ψ₀, ntuple(k -> n₀, Val(length(Ψ₀.Rs))); kwargs...)
+end
 
-groundstate(Ĥ::LocalHamiltonian,
-    Ψ₀::UniformCMPS{<:AbstractMatrix,N},
-    n₀s::NTuple{N,<:Number}; kwargs...) where {N} =
-    groundstate_constrained(Ĥ, Ψ₀, n₀s; kwargs...)
+function groundstate(Ĥ::LocalHamiltonian,
+                     Ψ₀::UniformCMPS{<:AbstractMatrix,N},
+                     n₀s::NTuple{N,<:Number}; kwargs...) where {N}
+    return groundstate_constrained(Ĥ, Ψ₀, n₀s; kwargs...)
+end
 
 function groundstate_unconstrained(Ĥ::LocalHamiltonian, Ψ₀::UniformCMPS;
-    gradtol=1e-7,
-    verbosity=2,
-    optalg=LBFGS(; gradtol=gradtol, verbosity=verbosity - 2),
-    eigalg=defaulteigalg(Ψ₀),
-    linalg=defaultlinalg(Ψ₀),
-    (finalize!)=OptimKit._finalize!,
-    kwargs...)
-
+                                   gradtol=1e-7,
+                                   verbosity=2,
+                                   optalg=LBFGS(; gradtol=gradtol, verbosity=verbosity - 2),
+                                   eigalg=defaulteigalg(Ψ₀),
+                                   linalg=defaultlinalg(Ψ₀),
+                                   (finalize!)=OptimKit._finalize!,
+                                   kwargs...)
     δ = 1
     function retract(x, d, α)
         ΨL, = x
@@ -47,8 +49,8 @@ function groundstate_unconstrained(Ĥ::LocalHamiltonian, Ψ₀::UniformCMPS;
         ΨL = InfiniteCMPS(QL, RLs; gauge=:l)
         ρR, λ, info_ρR = rightenv(ΨL, ρR; eigalg=eigalg, linalg=linalg, kwargs...)
         rmul!(ρR, 1 / tr(ρR[]))
-        HL, E, e, hL, info_HL =
-            leftenv(Ĥ, (ΨL, ρL, ρR); eigalg=eigalg, linalg=linalg, kwargs...)
+        HL, E, e, hL, info_HL = leftenv(Ĥ, (ΨL, ρL, ρR); eigalg=eigalg, linalg=linalg,
+                                        kwargs...)
 
         if info_ρR.converged == 0 || info_HL.converged == 0
             @warn "step $α : not converged, e = $E"
@@ -92,7 +94,7 @@ function groundstate_unconstrained(Ĥ::LocalHamiltonian, Ψ₀::UniformCMPS;
         normgrad = sqrt(normgrad2)
         verbosity > 1 &&
             @info @sprintf("UniformCMPS ground state: iter %4d: e = %.12f, ‖∇e‖ = %.4e",
-                numiter, E, normgrad)
+                           numiter, E, normgrad)
         return finalize!(x, E, d, numiter)
     end
 
@@ -112,36 +114,35 @@ function groundstate_unconstrained(Ĥ::LocalHamiltonian, Ψ₀::UniformCMPS;
     verbosity > 0 &&
         @info @sprintf("UniformCMPS ground state: initialization with e = %.12f", E)
 
-    x, E, grad, numfg, history =
-        optimize(fg, x, optalg; retract=retract,
-            precondition=precondition,
-            (finalize!)=_finalize!,
-            inner=inner, (transport!)=transport!,
-            (scale!)=scale!, (add!)=add!,
-            isometrictransport=true)
+    x, E, grad, numfg, history = optimize(fg, x, optalg; retract=retract,
+                                          precondition=precondition,
+                                          (finalize!)=_finalize!,
+                                          inner=inner, (transport!)=transport!,
+                                          (scale!)=scale!, (add!)=add!,
+                                          isometrictransport=true)
     (ΨL, ρR, HL, E, e, hL) = x
     normgrad = sqrt(inner(x, grad, grad))
     if verbosity > 0
         if normgrad <= gradtol
             @info @sprintf("UniformCMPS ground state: converged after %d iterations: e = %.12f, ‖∇e‖ = %.4e",
-                size(history, 1), E, normgrad)
+                           size(history, 1), E, normgrad)
         else
             @warn @sprintf("UniformCMPS ground state: not converged to requested tol: e = %.12f, ‖∇e‖ = %.4e",
-                E, normgrad)
+                           E, normgrad)
         end
     end
     return ΨL, ρL, ρR, E, e, normgrad, numfg, history
 end
 
 function groundstate_unconstrained2(Ĥ::LocalHamiltonian, Ψ₀::UniformCMPS;
-    gradtol=1e-7,
-    verbosity=2,
-    optalg=LBFGS(; gradtol=gradtol, verbosity=verbosity - 2),
-    eigalg=defaulteigalg(Ψ₀),
-    linalg=defaultlinalg(Ψ₀),
-    (finalize!)=OptimKit._finalize!,
-    kwargs...)
-
+                                    gradtol=1e-7,
+                                    verbosity=2,
+                                    optalg=LBFGS(; gradtol=gradtol,
+                                                 verbosity=verbosity - 2),
+                                    eigalg=defaulteigalg(Ψ₀),
+                                    linalg=defaultlinalg(Ψ₀),
+                                    (finalize!)=OptimKit._finalize!,
+                                    kwargs...)
     δ = 1
     function retract(x, d, α)
         ΨL, ΨR, C = x
@@ -174,10 +175,10 @@ function groundstate_unconstrained2(Ĥ::LocalHamiltonian, Ψ₀::UniformCMPS;
         QR = KR - sum(RR * RR' for RR in RRs) / 2
         ΨR = InfiniteCMPS(QR, RRs; gauge=:r)
 
-        HL, E, e, hL, info_HL =
-            leftenv(Ĥ, (ΨL, one(ρR), C * C'); eigalg=eigalg, linalg=linalg, kwargs...)
-        HR, E, e, hR, info_HR =
-            rightenv(Ĥ, (ΨR, C' * C, one(ρR)); eigalg=eigalg, linalg=linalg, kwargs...)
+        HL, E, e, hL, info_HL = leftenv(Ĥ, (ΨL, one(ρR), C * C'); eigalg=eigalg,
+                                        linalg=linalg, kwargs...)
+        HR, E, e, hR, info_HR = rightenv(Ĥ, (ΨR, C' * C, one(ρR)); eigalg=eigalg,
+                                         linalg=linalg, kwargs...)
         if info_ρR.converged == 0 || info_HL.converged == 0 || info_HR.converged == 0
             @warn "step $α : not converged, e = $E"
             @show info_ρR
@@ -210,7 +211,9 @@ function groundstate_unconstrained2(Ĥ::LocalHamiltonian, Ψ₀::UniformCMPS;
     end
 
     scale!((dC, dQC, dRCs), α) = (rmul!(dC, α), rmul!(dQC, α), rmul!.(dRCs, α))
-    add!((dC1, dQC1, dRCs1), (dC2, dQC2, dRCs2), α) = (axpy!(α, dC2, dC1), axpy!(α, dQC2, dQC1), axpy!.(α, dRCs2, dRCs1))
+    function add!((dC1, dQC1, dRCs1), (dC2, dQC2, dRCs2), α)
+        return (axpy!(α, dC2, dC1), axpy!(α, dQC2, dQC1), axpy!.(α, dRCs2, dRCs1))
+    end
 
     function _finalize!(x, E, d, numiter)
         normgrad2 = inner(x, d, d)
@@ -218,7 +221,7 @@ function groundstate_unconstrained2(Ĥ::LocalHamiltonian, Ψ₀::UniformCMPS;
         normgrad = sqrt(normgrad2)
         verbosity > 1 &&
             @info @sprintf("UniformCMPS ground state: iter %4d: e = %.12f, ‖∇e‖ = %.4e",
-                numiter, E, normgrad)
+                           numiter, E, normgrad)
         return finalize!(x, E, d, numiter)
     end
 
@@ -233,10 +236,10 @@ function groundstate_unconstrained2(Ĥ::LocalHamiltonian, Ψ₀::UniformCMPS;
     KR = (KR - KR') / 2
     QR = KR - sum(RR * RR' for RR in RRs) / 2
     ΨR = InfiniteCMPS(QR, RRs; gauge=:r)
-    HL, E, e, hL, info_HL =
-        leftenv(Ĥ, (ΨL, one(ρR), C * C'); eigalg=eigalg, linalg=linalg, kwargs...)
-    HR, E, e, hR, info_HR =
-        rightenv(Ĥ, (ΨR, C' * C, one(ρR)); eigalg=eigalg, linalg=linalg, kwargs...)
+    HL, E, e, hL, info_HL = leftenv(Ĥ, (ΨL, one(ρR), C * C'); eigalg=eigalg, linalg=linalg,
+                                    kwargs...)
+    HR, E, e, hR, info_HR = rightenv(Ĥ, (ΨR, C' * C, one(ρR)); eigalg=eigalg,
+                                     linalg=linalg, kwargs...)
     x = (ΨL, ΨR, C, HL, HR, E, e, hL, hR)
 
     if info_ρR.converged == 0 || info_HL.converged == 0 || info_HR.converged == 0
@@ -249,42 +252,38 @@ function groundstate_unconstrained2(Ĥ::LocalHamiltonian, Ψ₀::UniformCMPS;
     verbosity > 0 &&
         @info @sprintf("UniformCMPS ground state: initialization with e = %.12f", E)
 
-    x, E, grad, numfg, history =
-        optimize(fg, x, optalg; retract=retract,
-            precondition=precondition,
-            (finalize!)=_finalize!,
-            inner=inner, (transport!)=transport!,
-            (scale!)=scale!, (add!)=add!,
-            isometrictransport=true)
+    x, E, grad, numfg, history = optimize(fg, x, optalg; retract=retract,
+                                          precondition=precondition,
+                                          (finalize!)=_finalize!,
+                                          inner=inner, (transport!)=transport!,
+                                          (scale!)=scale!, (add!)=add!,
+                                          isometrictransport=true)
     (ΨL, ΨR, C, HL, HR, E, e, hL, hR) = x
     normgrad = sqrt(inner(x, grad, grad))
     if verbosity > 0
         if normgrad <= gradtol
             @info @sprintf("UniformCMPS ground state: converged after %d iterations: e = %.12f, ‖∇e‖ = %.4e",
-                size(history, 1), E, normgrad)
+                           size(history, 1), E, normgrad)
         else
             @warn @sprintf("UniformCMPS ground state: not converged to requested tol: e = %.12f, ‖∇e‖ = %.4e",
-                E, normgrad)
+                           E, normgrad)
         end
     end
     return ΨL, ΨR, C, HL, HR, E, e, normgrad, numfg, history
 end
 
-
-
 # groundstate with UniformCMPS
 function groundstate_constrained(Ĥ::LocalHamiltonian,
-    Ψ₀::UniformCMPS{<:AbstractMatrix,N},
-    n₀s::NTuple{N,Number};
-    gradtol=1e-7,
-    verbosity=2,
-    optalg=LBFGS(; gradtol=gradtol, verbosity=verbosity - 2),
-    eigalg=defaulteigalg(Ψ₀),
-    linalg=defaultlinalg(Ψ₀),
-    (finalize!)=OptimKit._finalize!,
-    chemical_potential_relaxation=1.0,
-    kwargs...) where {N}
-
+                                 Ψ₀::UniformCMPS{<:AbstractMatrix,N},
+                                 n₀s::NTuple{N,Number};
+                                 gradtol=1e-7,
+                                 verbosity=2,
+                                 optalg=LBFGS(; gradtol=gradtol, verbosity=verbosity - 2),
+                                 eigalg=defaulteigalg(Ψ₀),
+                                 linalg=defaultlinalg(Ψ₀),
+                                 (finalize!)=OptimKit._finalize!,
+                                 chemical_potential_relaxation=1.0,
+                                 kwargs...) where {N}
     δ = 1
     μs = ntuple(k -> one(scalartype(Ψ₀)), N)
     n̂s = ntuple(k -> ψ̂[k]' * ψ̂[k], N)
@@ -316,8 +315,8 @@ function groundstate_constrained(Ĥ::LocalHamiltonian,
         ρR, λ, info_ρR = rightenv(ΨL, ρR; eigalg=eigalg, linalg=linalg, kwargs...)
         rmul!(ρR, 1 / tr(ρR[]))
         ns = ntuple(k -> expval(n̂s[k], ΨL, ρL, ρR)[], N)
-        ΩL, Ω, ω, ωL, info_ΩL =
-            leftenv(Ω̂, (ΨL, ρL, ρR); eigalg=eigalg, linalg=linalg, kwargs...)
+        ΩL, Ω, ω, ωL, info_ΩL = leftenv(Ω̂, (ΨL, ρL, ρR); eigalg=eigalg, linalg=linalg,
+                                        kwargs...)
 
         if info_ρR.converged == 0 || info_ΩL.converged == 0
             @warn "step $α : not converged, ω = $Ω"
@@ -374,8 +373,8 @@ function groundstate_constrained(Ĥ::LocalHamiltonian,
         Ω̂ = Ĥ - sum(μs .* N̂s)
         δ = max(1e-12, 1e-3 * normgrad2)
         # recompute energy and gradient:
-        ΩL, Ω, ω, ωL, info_ΩL =
-            leftenv(Ω̂, (ΨL, ρL, ρR); eigalg=eigalg, linalg=linalg, kwargs...)
+        ΩL, Ω, ω, ωL, info_ΩL = leftenv(Ω̂, (ΨL, ρL, ρR); eigalg=eigalg, linalg=linalg,
+                                        kwargs...)
 
         if info_ρR.converged == 0 || info_ΩL.converged == 0
             @warn "finalizing step with new chemical potential : not converged, ω = $Ω"
@@ -403,8 +402,8 @@ function groundstate_constrained(Ĥ::LocalHamiltonian,
     rmul!(ΨL.Q, scale_factor)
     rmul!.(ΨL.Rs, sqrt(scale_factor))
     ns = ns .* scale_factor
-    ΩL, Ω, ω, ωL, info_ΩL =
-        leftenv(Ω̂, (ΨL, ρL, ρR); eigalg=eigalg, linalg=linalg, kwargs...)
+    ΩL, Ω, ω, ωL, info_ΩL = leftenv(Ω̂, (ΨL, ρL, ρR); eigalg=eigalg, linalg=linalg,
+                                    kwargs...)
 
     if info_ρR.converged == 0 || info_ΩL.converged == 0
         @warn "initial point not converged, ω = $Ω"
@@ -420,20 +419,20 @@ function groundstate_constrained(Ĥ::LocalHamiltonian,
         @info s
     end
 
-    x, Ω, grad, numfg, history =
-        optimize(fg, x, optalg; retract=retract,
-            precondition=precondition,
-            (finalize!)=_finalize!,
-            inner=inner, (transport!)=transport!,
-            (scale!)=scale!, (add!)=add!,
-            isometrictransport=true)
+    x, Ω, grad, numfg, history = optimize(fg, x, optalg; retract=retract,
+                                          precondition=precondition,
+                                          (finalize!)=_finalize!,
+                                          inner=inner, (transport!)=transport!,
+                                          (scale!)=scale!, (add!)=add!,
+                                          isometrictransport=true)
     (ΨL, ρR) = x
     normgrad = sqrt(inner(x, grad, grad))
     e = expval(density(Ĥ), ΨL, ρL, ρR)
     E = e[]
     if verbosity > 0
         if normgrad <= gradtol
-            s = @sprintf("UniformCMPS ground state: converged after %d iterations: ", size(history, 1))
+            s = @sprintf("UniformCMPS ground state: converged after %d iterations: ",
+                         size(history, 1))
         else
             s = "UniformCMPS ground state: not converged to requested tol: "
         end
@@ -456,7 +455,7 @@ function _groundstate_constraint_infostring(ω, e, ns, μs=nothing, normgrad=not
         end
     else
         s *= ", ns = ("
-        for k = 1:N
+        for k in 1:N
             s *= @sprintf("%.3f", ns[k])
             if k < N
                 s *= ", "
@@ -466,7 +465,7 @@ function _groundstate_constraint_infostring(ω, e, ns, μs=nothing, normgrad=not
         end
         if !isnothing(μs)
             s *= ", μs = ("
-            for k = 1:N
+            for k in 1:N
                 s *= @sprintf("%.3f", μs[k])
                 if k < N
                     s *= ", "
@@ -483,13 +482,12 @@ function _groundstate_constraint_infostring(ω, e, ns, μs=nothing, normgrad=not
 end
 
 function groundstate(H::LocalHamiltonian, Ψ₀::FourierCMPS;
-    optalg=ConjugateGradient(; verbosity=2, gradtol=1e-7),
-    eigalg=defaulteigalg(Ψ₀),
-    linalg=defaultlinalg(Ψ₀),
-    (finalize!)=OptimKit._finalize!,
-    test=false,
-    kwargs...)
-
+                     optalg=ConjugateGradient(; verbosity=2, gradtol=1e-7),
+                     eigalg=defaulteigalg(Ψ₀),
+                     linalg=defaultlinalg(Ψ₀),
+                     (finalize!)=OptimKit._finalize!,
+                     test=false,
+                     kwargs...)
     δ = 1
     function retract(x, d, α)
         ΨL, ρR, HL, = x
@@ -507,8 +505,8 @@ function groundstate(H::LocalHamiltonian, Ψ₀::FourierCMPS;
         ρR, λ, infoR = rightenv(ΨL, ρR; eigalg=eigalg, linalg=linalg, kwargs...)
         rmul!(ρR, 1 / tr(ρR[0]))
         ρL = one(ρR)
-        HL, E, e, hL, infoL =
-            leftenv(H, (ΨL, ρL, ρR); eigalg=eigalg, linalg=linalg, kwargs...)
+        HL, E, e, hL, infoL = leftenv(H, (ΨL, ρL, ρR); eigalg=eigalg, linalg=linalg,
+                                      kwargs...)
 
         if infoR.converged == 0 || infoL.converged == 0
             @warn "step $α : not converged, energy = $E"
@@ -589,13 +587,12 @@ function groundstate(H::LocalHamiltonian, Ψ₀::FourierCMPS;
         return optimtest(fg, x; alpha=-0.1:0.01:0.1, retract=retract, inner=inner)
     end
 
-    x, E, grad, numfg, history =
-        optimize(fg, x, optalg; retract=retract,
-            # precondition = precondition, # TODO
-            (finalize!)=_finalize!,
-            inner=inner, (transport!)=transport!,
-            (scale!)=scale!, (add!)=add!,
-            isometrictransport=true)
+    x, E, grad, numfg, history = optimize(fg, x, optalg; retract=retract,
+                                          # precondition = precondition, # TODO
+                                          (finalize!)=_finalize!,
+                                          inner=inner, (transport!)=transport!,
+                                          (scale!)=scale!, (add!)=add!,
+                                          isometrictransport=true)
     (ΨL, ρR, HL, E, e, hL) = x
     normgrad = sqrt(inner(x, grad, grad))
     return ΨL, one(ρR), ρR, E, e, normgrad, numfg, history
