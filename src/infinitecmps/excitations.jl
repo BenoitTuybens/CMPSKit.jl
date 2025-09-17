@@ -15,7 +15,7 @@ struct InfiniteCMPSExcitationSpace{T,N,S}
         @assert norm(QL + QL' + sum(adjoint.(RLs) .* RLs)) < defaulttol(C)
         @assert norm(QR + QR' + sum(RRs .* adjoint.(RRs))) < defaulttol(C)
         if !topo
-            @show QL * C - C * QR
+            @show norm(QL * C - C * QR)
             @assert QL * C ≈ C * QR
             @assert all(RLs .* Ref(C) .≈ Ref(C) .* RRs)
             @assert ρR ≈ C * C'
@@ -45,8 +45,8 @@ function InfiniteCMPSExcitationSpace(momentum, ΨL::State, ΨR::State=ΨL;
     QL, RLs = ΨL.Q, ΨL.Rs
     QR, RRs = ΨR.Q, ΨR.Rs
 
-    @show QL * C - C * QR
-    @show RLs .* Ref(C) .- Ref(C) .* RRs
+    #@show QL * C - C * QR
+    #@show RLs .* Ref(C) .- Ref(C) .* RRs
 
     p = convert(real(scalartype(QL)), momentum)
     return InfiniteCMPSExcitationSpace(p, QL, RLs, QR, RRs, ρR, ρL, C, topo)
@@ -64,7 +64,7 @@ function excitation_operator(Ĥ::LocalHamiltonian, space::UniformCMPSExcitation
                              kwargs...)
     ΨL = InfiniteCMPS(space.QL, space.RLs; gauge=:l)
     ρR = space.ρR
-    ΨR = InfiniteCMPS(space.QL, space.RLs; gauge=:r)
+    ΨR = InfiniteCMPS(space.QR, space.RRs; gauge=:r)
     ρL = space.ρL
 
     HL, eL, _ = leftenv(Ĥ, (ΨL, one(ρR), ρR); kwargs...)
@@ -74,8 +74,8 @@ function excitation_operator(Ĥ::LocalHamiltonian, space::UniformCMPSExcitation
     end
     e = (eL + eR) / 2
 
-    Heff = let QL = space.QL, RLs = space.RLs, QR = space.QR, RRs = space.RRs,
-        p = space.momentum,
+    Heff = let C = space.C, QL = space.QL, RLs = space.RLs, QR = space.QR, RRs = space.RRs,
+        p = space.momentum, topo = space.topological,
         HL = HL, HR = HR, TLR = RightTransfer(ΨL, ΨR), TRL = LeftTransfer(ΨR, ΨL)
 
         function (Xs)

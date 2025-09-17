@@ -122,7 +122,7 @@ function _ketfactor_tangent(op::Pairing{i,j}, QL, RLs, V, Ws, ∂Ws, QR=QL,
 end
 function _ketfactor_tangent(op::AdjointOperator{<:OnlyAnnihilators}, QL, RLs, V, Ws, ∂Ws,
                             QR=QL, RRs=RLs)
-    return zero(Q)
+    return zero(QL)
 end
 function _ketfactor_tangent(op::NormalOrderedTerm, QL, RLs, V, Ws, ∂Ws, QR=QL, RRs=RLs)
     return _ketfactor_tangent(op.annihilators, QL, RLs, V, Ws, ∂Ws, QR, RRs)
