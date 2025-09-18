@@ -146,6 +146,7 @@ function excitation_operator(Ĥ::LocalHamiltonian, space::UniformCMPSExcitation
                     if !iszero(p)
                         y = axpy!(im * p, x, y)
                     end
+                    return y
                 end
 
                 GL, = linsolve(-gL, zero(gL); kwargs...) do x
@@ -153,6 +154,7 @@ function excitation_operator(Ĥ::LocalHamiltonian, space::UniformCMPSExcitation
                     if !iszero(p)
                         y = axpy!(-im * p, x, y)
                     end
+                    return y
                 end
             else
                 gR = axpy!(-tr(C' * gR)[], C, gR) # tr should be zero by construction of V and W
