@@ -15,7 +15,6 @@ struct InfiniteCMPSExcitationSpace{T,N,S}
         @assert norm(QL + QL' + sum(adjoint.(RLs) .* RLs)) < defaulttol(C)
         @assert norm(QR + QR' + sum(RRs .* adjoint.(RRs))) < defaulttol(C)
         if !topo
-            @show norm(QL * C - C * QR)
             @assert QL * C ≈ C * QR
             @assert all(RLs .* Ref(C) .≈ Ref(C) .* RRs)
             @assert ρR ≈ C * C'
@@ -44,9 +43,6 @@ function InfiniteCMPSExcitationSpace(momentum, ΨL::State, ΨR::State=ΨL;
 
     QL, RLs = ΨL.Q, ΨL.Rs
     QR, RRs = ΨR.Q, ΨR.Rs
-
-    #@show QL * C - C * QR
-    #@show RLs .* Ref(C) .- Ref(C) .* RRs
 
     p = convert(real(scalartype(QL)), momentum)
     return InfiniteCMPSExcitationSpace(p, QL, RLs, QR, RRs, ρR, ρL, C, topo)
