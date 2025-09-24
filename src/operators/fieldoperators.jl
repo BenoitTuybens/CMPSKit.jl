@@ -33,8 +33,7 @@ const ∂ψ̂ = DifferentiatedAnnihilation{1}()
 const ∂ψ̂₁ = DifferentiatedAnnihilation{1}()
 const ∂ψ̂₂ = DifferentiatedAnnihilation{2}()
 const ∂ψ̂₃ = DifferentiatedAnnihilation{3}()
-Base.@pure Base.getindex(::DifferentiatedAnnihilation{1}, i::Int) =
-    DifferentiatedAnnihilation{i}()
+Base.@pure Base.getindex(::DifferentiatedAnnihilation{1}, i::Int) = DifferentiatedAnnihilation{i}()
 
 const DifferentiatedCreation{i} = AdjointOperator{DifferentiatedAnnihilation{i}}
 
@@ -58,18 +57,21 @@ end
 
 const Density{i} = NormalOrderedTerm{Annihilation{i},Annihilation{i}}
 const Kinetic{i} = NormalOrderedTerm{DifferentiatedAnnihilation{i},
-    DifferentiatedAnnihilation{i}}
+                                     DifferentiatedAnnihilation{i}}
 const ContactInteraction{i,j,k,l} = NormalOrderedTerm{Pairing{i,j},Pairing{k,l}}
 # ψ[l]'*ψ[k]'*ψ[i]*ψ[j]
 
-Base.:*(c::AdjointOperator{<:OnlyAnnihilators}, a::OnlyAnnihilators) =
-    NormalOrderedTerm(c', a)
+function Base.:*(c::AdjointOperator{<:OnlyAnnihilators}, a::OnlyAnnihilators)
+    return NormalOrderedTerm(c', a)
+end
 
-Base.:*(op1::NormalOrderedTerm, op2::OnlyAnnihilators) =
-    NormalOrderedTerm(op1.creators, op1.annihilators * op2)
+function Base.:*(op1::NormalOrderedTerm, op2::OnlyAnnihilators)
+    return NormalOrderedTerm(op1.creators, op1.annihilators * op2)
+end
 
-Base.:*(op1::AdjointOperator{<:OnlyAnnihilators}, op2::NormalOrderedTerm) =
-    NormalOrderedTerm(op2.creators * op1', op2.annihilators)
+function Base.:*(op1::AdjointOperator{<:OnlyAnnihilators}, op2::NormalOrderedTerm)
+    return NormalOrderedTerm(op2.creators * op1', op2.annihilators)
+end
 
 Base.adjoint(o::NormalOrderedTerm) = NormalOrderedTerm(o.annihilators, o.creators)
 
@@ -98,8 +100,12 @@ end
 # Tangents: contribution to ket factors, used for excitations. To support topologically
 # non-trivial excitations and centrally gauged excitations, we can have different cMPS
 # matrices to the left and right
-_ketfactor_tangent(op::Annihilation{i}, QL, RLs, V, Ws, ∂Ws, QR=QL, RRs=RLs) where {i} = Ws[i]
-function _ketfactor_tangent(op::DifferentiatedAnnihilation{i}, QL, RLs, V, Ws, ∂Ws, QR=QL, RRs=RLs) where {i}
+function _ketfactor_tangent(op::Annihilation{i}, QL, RLs, V, Ws, ∂Ws, QR=QL,
+                            RRs=RLs) where {i}
+    return Ws[i]
+end
+function _ketfactor_tangent(op::DifferentiatedAnnihilation{i}, QL, RLs, V, Ws, ∂Ws, QR=QL,
+                            RRs=RLs) where {i}
     RL = RLs[i]
     RR = RRs[i]
     W = Ws[i]
@@ -110,12 +116,17 @@ function _ketfactor_tangent(op::DifferentiatedAnnihilation{i}, QL, RLs, V, Ws, �
     mul!(𝒟W, RL, V, -1, 1)
     return 𝒟W
 end
-_ketfactor_tangent(op::Pairing{i,j}, QL, RLs, V, Ws, ∂Ws, QR=QL, RRs=RLs) where {i,j} =
-    mul!(Ws[i] * RRs[j], RLs[i], Ws[j], true, true)
-_ketfactor_tangent(op::AdjointOperator{<:OnlyAnnihilators}, QL, RLs, V, Ws, ∂Ws, QR=QL, RRs=RLs) = zero(Q)
-_ketfactor_tangent(op::NormalOrderedTerm, QL, RLs, V, Ws, ∂Ws, QR=QL, RRs=RLs) =
-    _ketfactor_tangent(op.annihilators, QL, RLs, V, Ws, ∂Ws, QR, RRs)
-
+function _ketfactor_tangent(op::Pairing{i,j}, QL, RLs, V, Ws, ∂Ws, QR=QL,
+                            RRs=RLs) where {i,j}
+    return mul!(Ws[i] * RRs[j], RLs[i], Ws[j], true, true)
+end
+function _ketfactor_tangent(op::AdjointOperator{<:OnlyAnnihilators}, QL, RLs, V, Ws, ∂Ws,
+                            QR=QL, RRs=RLs)
+    return zero(QL)
+end
+function _ketfactor_tangent(op::NormalOrderedTerm, QL, RLs, V, Ws, ∂Ws, QR=QL, RRs=RLs)
+    return _ketfactor_tangent(op.annihilators, QL, RLs, V, Ws, ∂Ws, QR, RRs)
+end
 
 # Cotangents: contribution to the gradient of the partial derivatives with respect
 # to Q, R, and ∂R (the last two are treated as being independent). Also used for excitations,
@@ -130,12 +141,13 @@ _brafactor_cotangentRs(op::OnlyAnnihilators, QL, RLs, QR=QL, RRs=RLs) = y -> zer
 function _brafactor_cotangentRs(op::Creation{i}, QL, RLs, QR=QL, RRs=RLs) where {i}
     return function (y)
         R̄s = ntuple(length(RLs)) do n
-            R̄ = n == i ? y : zero(y)
+            return R̄ = n == i ? y : zero(y)
         end
         return R̄s
     end
 end
-function _brafactor_cotangentRs(op::AdjointOperator{Pairing{i,j}}, QL, RLs, QR=QL, RRs=RLs) where {i,j}
+function _brafactor_cotangentRs(op::AdjointOperator{Pairing{i,j}}, QL, RLs, QR=QL,
+                                RRs=RLs) where {i,j}
     return function (y)
         R̄s = ntuple(length(RLs)) do n
             R̄ = zero(y)
@@ -145,34 +157,38 @@ function _brafactor_cotangentRs(op::AdjointOperator{Pairing{i,j}}, QL, RLs, QR=Q
             if n == j
                 R̄ += RLs[i]' * y
             end
-            R̄
+            return R̄
         end
         return R̄s
     end
 end
-function _brafactor_cotangentRs(op::NormalOrderedTerm{Annihilation{i},<:Any}, QL, RLs, QR=QL, RRs=RLs) where {i}
+function _brafactor_cotangentRs(op::NormalOrderedTerm{Annihilation{i},<:Any}, QL, RLs,
+                                QR=QL, RRs=RLs) where {i}
     return function (y)
         R̄s = ntuple(length(RLs)) do n
-            R̄ = n == i ? y : zero(y)
+            return R̄ = n == i ? y : zero(y)
         end
         return R̄s
     end
 end
 
-const ContainsDifferentiatedCreation{i} =
-    Union{DifferentiatedCreation{i},NormalOrderedTerm{DifferentiatedAnnihilation{i},<:Any}}
+const ContainsDifferentiatedCreation{i} = Union{DifferentiatedCreation{i},
+                                                NormalOrderedTerm{DifferentiatedAnnihilation{i},
+                                                                  <:Any}}
 
 # the following assume ∂R is independent, and only computes the gradient to R
-function _brafactor_cotangentRs(op::ContainsDifferentiatedCreation{i}, QL, RLs, QR=QL, RRs=RLs) where {i}
+function _brafactor_cotangentRs(op::ContainsDifferentiatedCreation{i}, QL, RLs, QR=QL,
+                                RRs=RLs) where {i}
     return function (y)
         R̄s = ntuple(length(RLs)) do n
-            R̄ = n == i ? QL' * y - y * QR' : zero(y)
+            return R̄ = n == i ? QL' * y - y * QR' : zero(y)
         end
         return R̄s
     end
 end
 
-function _brafactor_cotangentRs(op::NormalOrderedTerm{Pairing{i,j},<:Any}, QL, RLs, QR=QL, RRs=RLs) where {i,j}
+function _brafactor_cotangentRs(op::NormalOrderedTerm{Pairing{i,j},<:Any}, QL, RLs, QR=QL,
+                                RRs=RLs) where {i,j}
     return function (y)
         R̄s = ntuple(length(RLs)) do n
             R̄ = zero(RLs[n])
@@ -189,17 +205,19 @@ function _brafactor_cotangentRs(op::NormalOrderedTerm{Pairing{i,j},<:Any}, QL, R
 end
 
 _brafactor_cotangentQ(op::FieldOperator, QL, RLs, QR=QL, RRs=RLs) = y -> zero(QL)
-function _brafactor_cotangentQ(op::ContainsDifferentiatedCreation{i}, QL, RLs, QR=QL, RRs=RLs) where {i}
+function _brafactor_cotangentQ(op::ContainsDifferentiatedCreation{i}, QL, RLs, QR=QL,
+                               RRs=RLs) where {i}
     return function (y)
-        -RLs[i]' * y + y * RRs[i]'
+        return -RLs[i]' * y + y * RRs[i]'
     end
 end
 
 _brafactor_cotangent∂Rs(op::FieldOperator, QL, RLs, QR=QL, RRs=RLs) = y -> zero.(RLs)
-function _brafactor_cotangent∂Rs(op::ContainsDifferentiatedCreation{i}, QL, RLs, QR=QL, RRs=RLs) where {i}
+function _brafactor_cotangent∂Rs(op::ContainsDifferentiatedCreation{i}, QL, RLs, QR=QL,
+                                 RRs=RLs) where {i}
     return function (y)
         ∂R̄s = ntuple(length(RLs)) do n
-            R̄ = n == i ? y : zero(y)
+            return R̄ = n == i ? y : zero(y)
         end
         return ∂R̄s
     end

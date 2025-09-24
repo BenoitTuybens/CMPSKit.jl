@@ -14,20 +14,22 @@ struct RightTransfer{T,N}
     R₂s::NTuple{N,T}
 end
 LeftTransfer(Q::T, Rs::NTuple{N,T}) where {T<:MatrixFunction,N} = LeftTransfer(Q, Rs, Q, Rs)
-RightTransfer(Q::T, Rs::NTuple{N,T}) where {T<:MatrixFunction,N} = RightTransfer(Q, Rs, Q, Rs)
+function RightTransfer(Q::T, Rs::NTuple{N,T}) where {T<:MatrixFunction,N}
+    return RightTransfer(Q, Rs, Q, Rs)
+end
 
-function LeftTransfer(Ψ₁::CMPS, Ψ₂::CMPS = Ψ₁) where {CMPS<:AbstractCMPS}
+function LeftTransfer(Ψ₁::CMPS, Ψ₂::CMPS=Ψ₁) where {CMPS<:AbstractCMPS}
     domain(Ψ₁) == domain(Ψ₂) || throw(DomainMismatch())
     return LeftTransfer(Ψ₁.Q, Ψ₁.Rs, Ψ₂.Q, Ψ₂.Rs)
 end
 
-function RightTransfer(Ψ₁::CMPS, Ψ₂::CMPS = Ψ₁) where {CMPS<:AbstractCMPS}
+function RightTransfer(Ψ₁::CMPS, Ψ₂::CMPS=Ψ₁) where {CMPS<:AbstractCMPS}
     domain(Ψ₁) == domain(Ψ₂) || throw(DomainMismatch())
     return RightTransfer(Ψ₁.Q, Ψ₁.Rs, Ψ₂.Q, Ψ₂.Rs)
 end
 
-scalartype(::Type{<:LeftTransfer{T}}) where T = scalartype(T)
-scalartype(::Type{<:RightTransfer{T}}) where T = scalartype(T)
+scalartype(::Type{<:LeftTransfer{T}}) where {T} = scalartype(T)
+scalartype(::Type{<:RightTransfer{T}}) where {T} = scalartype(T)
 
 const UniformLeftTransfer = LeftTransfer{<:Constant}
 const UniformRightTransfer = RightTransfer{<:Constant}

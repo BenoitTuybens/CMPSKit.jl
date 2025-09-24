@@ -1,13 +1,14 @@
 using LinearAlgebra
 import LinearAlgebra: BlasFloat
 
-exp_blocktriangular2(A11::AbstractMatrix, A22::AbstractMatrix, A33::AbstractMatrix,
-                        B12::AbstractMatrix, B23::AbstractMatrix) =
-    exp_blocktriangular2!(copy.((A11, A22, A33, B12, B23))...)
+function exp_blocktriangular2(A11::AbstractMatrix, A22::AbstractMatrix, A33::AbstractMatrix,
+                              B12::AbstractMatrix, B23::AbstractMatrix)
+    return exp_blocktriangular2!(copy.((A11, A22, A33, B12, B23))...)
+end
 
 function exp_blocktriangular2!(A11::StridedMatrix{T}, A22::StridedMatrix{T},
-                                A33::StridedMatrix{T}, B12::StridedMatrix{T},
-                                B23::StridedMatrix{T}) where {T<:BlasFloat}
+                               A33::StridedMatrix{T}, B12::StridedMatrix{T},
+                               B23::StridedMatrix{T}) where {T<:BlasFloat}
     # Dimension checking
     n1 = LinearAlgebra.checksquare(A11)
     n2 = LinearAlgebra.checksquare(A22)
@@ -30,19 +31,35 @@ function exp_blocktriangular2!(A11::StridedMatrix{T}, A22::StridedMatrix{T},
         s = 0
         if nA > 0.95
             A1UpV, A1VmU, A2UpV, A2VmU, A3UpV, A3VmU,
-            B12UpV, B12VmU, B23UpV, B23VmU, C13UpV, C13VmU = exp_blocktriangular2_pade9(A11, A22, A33, B12, B23)
+            B12UpV, B12VmU, B23UpV, B23VmU, C13UpV, C13VmU = exp_blocktriangular2_pade9(A11,
+                                                                                        A22,
+                                                                                        A33,
+                                                                                        B12,
+                                                                                        B23)
         elseif nA > 0.25
             A1UpV, A1VmU, A2UpV, A2VmU, A3UpV, A3VmU,
-            B12UpV, B12VmU, B23UpV, B23VmU, C13UpV, C13VmU = exp_blocktriangular2_pade7(A11, A22, A33, B12, B23)
+            B12UpV, B12VmU, B23UpV, B23VmU, C13UpV, C13VmU = exp_blocktriangular2_pade7(A11,
+                                                                                        A22,
+                                                                                        A33,
+                                                                                        B12,
+                                                                                        B23)
         elseif nA > 0.015
             A1UpV, A1VmU, A2UpV, A2VmU, A3UpV, A3VmU,
-            B12UpV, B12VmU, B23UpV, B23VmU, C13UpV, C13VmU = exp_blocktriangular2_pade5(A11, A22, A33, B12, B23)
+            B12UpV, B12VmU, B23UpV, B23VmU, C13UpV, C13VmU = exp_blocktriangular2_pade5(A11,
+                                                                                        A22,
+                                                                                        A33,
+                                                                                        B12,
+                                                                                        B23)
         else
             A1UpV, A1VmU, A2UpV, A2VmU, A3UpV, A3VmU,
-            B12UpV, B12VmU, B23UpV, B23VmU, C13UpV, C13VmU = exp_blocktriangular2_pade3(A11, A22, A33, B12, B23)
+            B12UpV, B12VmU, B23UpV, B23VmU, C13UpV, C13VmU = exp_blocktriangular2_pade3(A11,
+                                                                                        A22,
+                                                                                        A33,
+                                                                                        B12,
+                                                                                        B23)
         end
     else
-        s  = ceil(Int, log2(nA/5.4)) # power of 2 later reversed by squaring
+        s = ceil(Int, log2(nA / 5.4)) # power of 2 later reversed by squaring
         if s > 0
             factor = convert(T, 2^s)
             A11 ./= factor
@@ -52,7 +69,11 @@ function exp_blocktriangular2!(A11::StridedMatrix{T}, A22::StridedMatrix{T},
             B23 ./= factor
         end
         A1UpV, A1VmU, A2UpV, A2VmU, A3UpV, A3VmU,
-        B12UpV, B12VmU, B23UpV, B23VmU, C13UpV, C13VmU = exp_blocktriangular2_pade13(A11, A22, A33, B12, B23)
+        B12UpV, B12VmU, B23UpV, B23VmU, C13UpV, C13VmU = exp_blocktriangular2_pade13(A11,
+                                                                                     A22,
+                                                                                     A33,
+                                                                                     B12,
+                                                                                     B23)
     end
 
     A1F = lu!(A1VmU)
@@ -68,14 +89,20 @@ function exp_blocktriangular2!(A11::StridedMatrix{T}, A22::StridedMatrix{T},
 
     if s > 0
         # recylce memory
-        XA1′ = A1VmU; XA2′ = A2VmU; XA3′ = A3VmU; XB12′ = B12VmU; XB23′ = B23VmU; XC13′ = C13VmU;
-        for t = 1:s
+        XA1′ = A1VmU
+        XA2′ = A2VmU
+        XA3′ = A3VmU
+        XB12′ = B12VmU
+        XB23′ = B23VmU
+        XC13′ = C13VmU
+        for t in 1:s
             XA1′ = mul!(XA1′, XA1, XA1)
             XA2′ = mul!(XA2′, XA2, XA2)
             XA3′ = mul!(XA3′, XA3, XA3)
             XB12′ = mul!(mul!(XB12′, XA1, XB12), XB12, XA2, true, true)
             XB23′ = mul!(mul!(XB23′, XA2, XB23), XB23, XA3, true, true)
-            XC13′ = mul!(mul!(mul!(XC13′, XB12, XB23), XA1, XC13, true, true), XC13, XA3, true, true)
+            XC13′ = mul!(mul!(mul!(XC13′, XB12, XB23), XA1, XC13, true, true), XC13, XA3,
+                         true, true)
             XA1, XA1′ = XA1′, XA1
             XA2, XA2′ = XA2′, XA2
             XA3, XA3′ = XA3′, XA3
@@ -97,9 +124,11 @@ end
 
 function exp_blocktriangular2_pade13(A11, A22, A33, B12, B23)
     T = eltype(A11)
-    coeffs = T[64764752532480000., 32382376266240000., 7771770303897600., 1187353796428800.,
-            129060195264000., 10559470521600., 670442572800., 33522128640., 1323241920.,
-            40840800., 960960., 16380., 182., 1.]
+    coeffs = T[64764752532480000.0, 32382376266240000.0, 7771770303897600.0,
+               1187353796428800.0,
+               129060195264000.0, 10559470521600.0, 670442572800.0, 33522128640.0,
+               1323241920.0,
+               40840800.0, 960960.0, 16380.0, 182.0, 1.0]
 
     A11_0 = one(A11)
     A22_0 = one(A22)
@@ -132,39 +161,63 @@ function exp_blocktriangular2_pade13(A11, A22, A33, B12, B23)
     B12_V′ = coeffs[13] .* B12_6 .+ coeffs[11] .* B12_4 .+ coeffs[9] .* B12_2
     B23_V′ = coeffs[13] .* B23_6 .+ coeffs[11] .* B23_4 .+ coeffs[9] .* B23_2
     C13_V′ = coeffs[13] .* C13_6 .+ coeffs[11] .* C13_4 .+ coeffs[9] .* C13_2
-    A11_V = coeffs[7] .* A11_6 .+ coeffs[5] .* A11_4 .+ coeffs[3] .* A11_2 .+ coeffs[1] .* A11_0
-    A22_V = coeffs[7] .* A22_6 .+ coeffs[5] .* A22_4 .+ coeffs[3] .* A22_2 .+ coeffs[1] .* A22_0
-    A33_V = coeffs[7] .* A33_6 .+ coeffs[5] .* A33_4 .+ coeffs[3] .* A33_2 .+ coeffs[1] .* A33_0
-    B12_V = coeffs[7] .* B12_6 .+ coeffs[5] .* B12_4 .+ coeffs[3] .* B12_2 .+ coeffs[1] .* B12_0
-    B23_V = coeffs[7] .* B23_6 .+ coeffs[5] .* B23_4 .+ coeffs[3] .* B23_2 .+ coeffs[1] .* B23_0
-    C13_V = coeffs[7] .* C13_6 .+ coeffs[5] .* C13_4 .+ coeffs[3] .* C13_2 .+ coeffs[1] .* C13_0
+    A11_V = coeffs[7] .* A11_6 .+ coeffs[5] .* A11_4 .+ coeffs[3] .* A11_2 .+
+            coeffs[1] .* A11_0
+    A22_V = coeffs[7] .* A22_6 .+ coeffs[5] .* A22_4 .+ coeffs[3] .* A22_2 .+
+            coeffs[1] .* A22_0
+    A33_V = coeffs[7] .* A33_6 .+ coeffs[5] .* A33_4 .+ coeffs[3] .* A33_2 .+
+            coeffs[1] .* A33_0
+    B12_V = coeffs[7] .* B12_6 .+ coeffs[5] .* B12_4 .+ coeffs[3] .* B12_2 .+
+            coeffs[1] .* B12_0
+    B23_V = coeffs[7] .* B23_6 .+ coeffs[5] .* B23_4 .+ coeffs[3] .* B23_2 .+
+            coeffs[1] .* B23_0
+    C13_V = coeffs[7] .* C13_6 .+ coeffs[5] .* C13_4 .+ coeffs[3] .* C13_2 .+
+            coeffs[1] .* C13_0
     A11_V = mul!(A11_V, A11_6, A11_V′, true, true)
     A22_V = mul!(A22_V, A22_6, A22_V′, true, true)
     A33_V = mul!(A33_V, A33_6, A33_V′, true, true)
     B12_V = mul!(mul!(B12_V, A11_6, B12_V′, true, true), B12_6, A22_V′, true, true)
     B23_V = mul!(mul!(B23_V, A22_6, B23_V′, true, true), B23_6, A33_V′, true, true)
-    C13_V = mul!(mul!(mul!(C13_V, B12_6, B23_V′, true, true), A11_6, C13_V′, true, true), C13_6, A33_V′, true, true)
+    C13_V = mul!(mul!(mul!(C13_V, B12_6, B23_V′, true, true), A11_6, C13_V′, true, true),
+                 C13_6, A33_V′, true, true)
 
-    A11_W′ = A11_V′; A22_W′ = A22_V′; A33_W′ = A33_V′; B12_W′ = B12_V′; B23_W′ = B23_V′; C13_W′ = C13_V′
-    A11_W = A11_0; A22_W = A22_0; A33_W = A33_0; B12_W = B12_0; B23_W = B23_0; C13_W = C13_0
+    A11_W′ = A11_V′
+    A22_W′ = A22_V′
+    A33_W′ = A33_V′
+    B12_W′ = B12_V′
+    B23_W′ = B23_V′
+    C13_W′ = C13_V′
+    A11_W = A11_0
+    A22_W = A22_0
+    A33_W = A33_0
+    B12_W = B12_0
+    B23_W = B23_0
+    C13_W = C13_0
     A11_W′ .= coeffs[14] .* A11_6 .+ coeffs[12] .* A11_4 .+ coeffs[10] .* A11_2
     A22_W′ .= coeffs[14] .* A22_6 .+ coeffs[12] .* A22_4 .+ coeffs[10] .* A22_2
     A33_W′ .= coeffs[14] .* A33_6 .+ coeffs[12] .* A33_4 .+ coeffs[10] .* A33_2
     B12_W′ .= coeffs[14] .* B12_6 .+ coeffs[12] .* B12_4 .+ coeffs[10] .* B12_2
     B23_W′ .= coeffs[14] .* B23_6 .+ coeffs[12] .* B23_4 .+ coeffs[10] .* B23_2
     C13_W′ .= coeffs[14] .* C13_6 .+ coeffs[12] .* C13_4 .+ coeffs[10] .* C13_2
-    A11_W .= coeffs[8] .* A11_6 .+ coeffs[6] .* A11_4 .+ coeffs[4] .* A11_2 .+ coeffs[2] .* A11_0
-    A22_W .= coeffs[8] .* A22_6 .+ coeffs[6] .* A22_4 .+ coeffs[4] .* A22_2 .+ coeffs[2] .* A22_0
-    A33_W .= coeffs[8] .* A33_6 .+ coeffs[6] .* A33_4 .+ coeffs[4] .* A33_2 .+ coeffs[2] .* A33_0
-    B12_W .= coeffs[8] .* B12_6 .+ coeffs[6] .* B12_4 .+ coeffs[4] .* B12_2 .+ coeffs[2] .* B12_0
-    B23_W .= coeffs[8] .* B23_6 .+ coeffs[6] .* B23_4 .+ coeffs[4] .* B23_2 .+ coeffs[2] .* B23_0
-    C13_W .= coeffs[8] .* C13_6 .+ coeffs[6] .* C13_4 .+ coeffs[4] .* C13_2 .+ coeffs[2] .* C13_0
+    A11_W .= coeffs[8] .* A11_6 .+ coeffs[6] .* A11_4 .+ coeffs[4] .* A11_2 .+
+             coeffs[2] .* A11_0
+    A22_W .= coeffs[8] .* A22_6 .+ coeffs[6] .* A22_4 .+ coeffs[4] .* A22_2 .+
+             coeffs[2] .* A22_0
+    A33_W .= coeffs[8] .* A33_6 .+ coeffs[6] .* A33_4 .+ coeffs[4] .* A33_2 .+
+             coeffs[2] .* A33_0
+    B12_W .= coeffs[8] .* B12_6 .+ coeffs[6] .* B12_4 .+ coeffs[4] .* B12_2 .+
+             coeffs[2] .* B12_0
+    B23_W .= coeffs[8] .* B23_6 .+ coeffs[6] .* B23_4 .+ coeffs[4] .* B23_2 .+
+             coeffs[2] .* B23_0
+    C13_W .= coeffs[8] .* C13_6 .+ coeffs[6] .* C13_4 .+ coeffs[4] .* C13_2 .+
+             coeffs[2] .* C13_0
     A11_W = mul!(A11_W, A11_6, A11_W′, true, true)
     A22_W = mul!(A22_W, A22_6, A22_W′, true, true)
     A33_W = mul!(A33_W, A33_6, A33_W′, true, true)
     B12_W = mul!(mul!(B12_W, A11_6, B12_W′, true, true), B12_6, A22_W′, true, true)
     B23_W = mul!(mul!(B23_W, A22_6, B23_W′, true, true), B23_6, A33_W′, true, true)
-    C13_W = mul!(mul!(mul!(C13_W, B12_6, B23_W′, true, true), A11_6, C13_W′, true, true), C13_6, A33_W′, true, true)
+    C13_W = mul!(mul!(mul!(C13_W, B12_6, B23_W′, true, true), A11_6, C13_W′, true, true),
+                 C13_6, A33_W′, true, true)
 
     A11_U = mul!(A11_2, A11, A11_W)
     A22_U = mul!(A22_2, A22, A22_W)
@@ -187,13 +240,14 @@ function exp_blocktriangular2_pade13(A11, A22, A33, B12, B23)
     C13_V .-= C13_U
 
     return A11_0, A11_V, A22_0, A22_V, A33_0, A33_V,
-            B12_0, B12_V, B23_0, B23_V, C13_0, C13_V
+           B12_0, B12_V, B23_0, B23_V, C13_0, C13_V
 end
 
 function exp_blocktriangular2_pade9(A11, A22, A33, B12, B23)
     T = eltype(A11)
-    coeffs = T[17643225600., 8821612800., 2075673600., 302702400., 30270240., 2162160.,
-                110880., 3960., 90., 1.]
+    coeffs = T[17643225600.0, 8821612800.0, 2075673600.0, 302702400.0, 30270240.0,
+               2162160.0,
+               110880.0, 3960.0, 90.0, 1.0]
 
     A11_0 = one(A11)
     A22_0 = one(A22)
@@ -220,27 +274,45 @@ function exp_blocktriangular2_pade9(A11, A22, A33, B12, B23)
     B23_6 = mul!(A22_4 * B23_2, B23_4, A33_2, true, true)
     C13_6 = mul!(mul!(B12_4 * B23_2, A11_4, C13_2, true, true), C13_4, A33_2, true, true)
 
-    A11_V = coeffs[7] .* A11_6 .+ coeffs[5] .* A11_4 .+ coeffs[3] .* A11_2 .+ coeffs[1] .* A11_0
-    A22_V = coeffs[7] .* A22_6 .+ coeffs[5] .* A22_4 .+ coeffs[3] .* A22_2 .+ coeffs[1] .* A22_0
-    A33_V = coeffs[7] .* A33_6 .+ coeffs[5] .* A33_4 .+ coeffs[3] .* A33_2 .+ coeffs[1] .* A33_0
-    B12_V = coeffs[7] .* B12_6 .+ coeffs[5] .* B12_4 .+ coeffs[3] .* B12_2 .+ coeffs[1] .* B12_0
-    B23_V = coeffs[7] .* B23_6 .+ coeffs[5] .* B23_4 .+ coeffs[3] .* B23_2 .+ coeffs[1] .* B23_0
-    C13_V = coeffs[7] .* C13_6 .+ coeffs[5] .* C13_4 .+ coeffs[3] .* C13_2 .+ coeffs[1] .* C13_0
+    A11_V = coeffs[7] .* A11_6 .+ coeffs[5] .* A11_4 .+ coeffs[3] .* A11_2 .+
+            coeffs[1] .* A11_0
+    A22_V = coeffs[7] .* A22_6 .+ coeffs[5] .* A22_4 .+ coeffs[3] .* A22_2 .+
+            coeffs[1] .* A22_0
+    A33_V = coeffs[7] .* A33_6 .+ coeffs[5] .* A33_4 .+ coeffs[3] .* A33_2 .+
+            coeffs[1] .* A33_0
+    B12_V = coeffs[7] .* B12_6 .+ coeffs[5] .* B12_4 .+ coeffs[3] .* B12_2 .+
+            coeffs[1] .* B12_0
+    B23_V = coeffs[7] .* B23_6 .+ coeffs[5] .* B23_4 .+ coeffs[3] .* B23_2 .+
+            coeffs[1] .* B23_0
+    C13_V = coeffs[7] .* C13_6 .+ coeffs[5] .* C13_4 .+ coeffs[3] .* C13_2 .+
+            coeffs[1] .* C13_0
 
-    A11_W = A11_0; A22_W = A22_0; A33_W = A33_0; B12_W = B12_0; B23_W = B23_0; C13_W = C13_0
-    A11_W .= coeffs[8] .* A11_6 .+ coeffs[6] .* A11_4 .+ coeffs[4] .* A11_2 .+ coeffs[2] .* A11_0
-    A22_W .= coeffs[8] .* A22_6 .+ coeffs[6] .* A22_4 .+ coeffs[4] .* A22_2 .+ coeffs[2] .* A22_0
-    A33_W .= coeffs[8] .* A33_6 .+ coeffs[6] .* A33_4 .+ coeffs[4] .* A33_2 .+ coeffs[2] .* A33_0
-    B12_W .= coeffs[8] .* B12_6 .+ coeffs[6] .* B12_4 .+ coeffs[4] .* B12_2 .+ coeffs[2] .* B12_0
-    B23_W .= coeffs[8] .* B23_6 .+ coeffs[6] .* B23_4 .+ coeffs[4] .* B23_2 .+ coeffs[2] .* B23_0
-    C13_W .= coeffs[8] .* C13_6 .+ coeffs[6] .* C13_4 .+ coeffs[4] .* C13_2 .+ coeffs[2] .* C13_0
+    A11_W = A11_0
+    A22_W = A22_0
+    A33_W = A33_0
+    B12_W = B12_0
+    B23_W = B23_0
+    C13_W = C13_0
+    A11_W .= coeffs[8] .* A11_6 .+ coeffs[6] .* A11_4 .+ coeffs[4] .* A11_2 .+
+             coeffs[2] .* A11_0
+    A22_W .= coeffs[8] .* A22_6 .+ coeffs[6] .* A22_4 .+ coeffs[4] .* A22_2 .+
+             coeffs[2] .* A22_0
+    A33_W .= coeffs[8] .* A33_6 .+ coeffs[6] .* A33_4 .+ coeffs[4] .* A33_2 .+
+             coeffs[2] .* A33_0
+    B12_W .= coeffs[8] .* B12_6 .+ coeffs[6] .* B12_4 .+ coeffs[4] .* B12_2 .+
+             coeffs[2] .* B12_0
+    B23_W .= coeffs[8] .* B23_6 .+ coeffs[6] .* B23_4 .+ coeffs[4] .* B23_2 .+
+             coeffs[2] .* B23_0
+    C13_W .= coeffs[8] .* C13_6 .+ coeffs[6] .* C13_4 .+ coeffs[4] .* C13_2 .+
+             coeffs[2] .* C13_0
 
     A11_8 = mul!(A11_4, A11_6, A11_2)
     A22_8 = mul!(A22_4, A22_6, A22_2)
     A33_8 = mul!(A33_4, A33_6, A33_2)
     B12_8 = mul!(mul!(B12_4, A11_6, B12_2), B12_6, A22_2, true, true)
     B23_8 = mul!(mul!(B23_4, A22_6, B23_2), B23_6, A33_2, true, true)
-    C13_8 = mul!(mul!(mul!(C13_4, B12_6, B23_2), A11_6, C13_2, true, true), C13_6, A33_2, true, true)
+    C13_8 = mul!(mul!(mul!(C13_4, B12_6, B23_2), A11_6, C13_2, true, true), C13_6, A33_2,
+                 true, true)
 
     A11_V .+= coeffs[9] .* A11_8
     A22_V .+= coeffs[9] .* A22_8
@@ -277,12 +349,12 @@ function exp_blocktriangular2_pade9(A11, A22, A33, B12, B23)
     C13_V .-= C13_U
 
     return A11_0, A11_V, A22_0, A22_V, A33_0, A33_V,
-            B12_0, B12_V, B23_0, B23_V, C13_0, C13_V
+           B12_0, B12_V, B23_0, B23_V, C13_0, C13_V
 end
 
 function exp_blocktriangular2_pade7(A11, A22, A33, B12, B23)
     T = eltype(A11)
-    coeffs = T[17297280., 8648640., 1995840., 277200., 25200., 1512., 56., 1.]
+    coeffs = T[17297280.0, 8648640.0, 1995840.0, 277200.0, 25200.0, 1512.0, 56.0, 1.0]
 
     A11_0 = one(A11)
     A22_0 = one(A22)
@@ -309,20 +381,37 @@ function exp_blocktriangular2_pade7(A11, A22, A33, B12, B23)
     B23_6 = mul!(A22_4 * B23_2, B23_4, A33_2, true, true)
     C13_6 = mul!(mul!(B12_4 * B23_2, A11_4, C13_2, true, true), C13_4, A33_2, true, true)
 
-    A11_V = coeffs[7] .* A11_6 .+ coeffs[5] .* A11_4 .+ coeffs[3] .* A11_2 .+ coeffs[1] .* A11_0
-    A22_V = coeffs[7] .* A22_6 .+ coeffs[5] .* A22_4 .+ coeffs[3] .* A22_2 .+ coeffs[1] .* A22_0
-    A33_V = coeffs[7] .* A33_6 .+ coeffs[5] .* A33_4 .+ coeffs[3] .* A33_2 .+ coeffs[1] .* A33_0
-    B12_V = coeffs[7] .* B12_6 .+ coeffs[5] .* B12_4 .+ coeffs[3] .* B12_2 .+ coeffs[1] .* B12_0
-    B23_V = coeffs[7] .* B23_6 .+ coeffs[5] .* B23_4 .+ coeffs[3] .* B23_2 .+ coeffs[1] .* B23_0
-    C13_V = coeffs[7] .* C13_6 .+ coeffs[5] .* C13_4 .+ coeffs[3] .* C13_2 .+ coeffs[1] .* C13_0
+    A11_V = coeffs[7] .* A11_6 .+ coeffs[5] .* A11_4 .+ coeffs[3] .* A11_2 .+
+            coeffs[1] .* A11_0
+    A22_V = coeffs[7] .* A22_6 .+ coeffs[5] .* A22_4 .+ coeffs[3] .* A22_2 .+
+            coeffs[1] .* A22_0
+    A33_V = coeffs[7] .* A33_6 .+ coeffs[5] .* A33_4 .+ coeffs[3] .* A33_2 .+
+            coeffs[1] .* A33_0
+    B12_V = coeffs[7] .* B12_6 .+ coeffs[5] .* B12_4 .+ coeffs[3] .* B12_2 .+
+            coeffs[1] .* B12_0
+    B23_V = coeffs[7] .* B23_6 .+ coeffs[5] .* B23_4 .+ coeffs[3] .* B23_2 .+
+            coeffs[1] .* B23_0
+    C13_V = coeffs[7] .* C13_6 .+ coeffs[5] .* C13_4 .+ coeffs[3] .* C13_2 .+
+            coeffs[1] .* C13_0
 
-    A11_W = A11_0; A22_W = A22_0; A33_W = A33_0; B12_W = B12_0; B23_W = B23_0; C13_W = C13_0
-    A11_W .= coeffs[8] .* A11_6 .+ coeffs[6] .* A11_4 .+ coeffs[4] .* A11_2 .+ coeffs[2] .* A11_0
-    A22_W .= coeffs[8] .* A22_6 .+ coeffs[6] .* A22_4 .+ coeffs[4] .* A22_2 .+ coeffs[2] .* A22_0
-    A33_W .= coeffs[8] .* A33_6 .+ coeffs[6] .* A33_4 .+ coeffs[4] .* A33_2 .+ coeffs[2] .* A33_0
-    B12_W .= coeffs[8] .* B12_6 .+ coeffs[6] .* B12_4 .+ coeffs[4] .* B12_2 .+ coeffs[2] .* B12_0
-    B23_W .= coeffs[8] .* B23_6 .+ coeffs[6] .* B23_4 .+ coeffs[4] .* B23_2 .+ coeffs[2] .* B23_0
-    C13_W .= coeffs[8] .* C13_6 .+ coeffs[6] .* C13_4 .+ coeffs[4] .* C13_2 .+ coeffs[2] .* C13_0
+    A11_W = A11_0
+    A22_W = A22_0
+    A33_W = A33_0
+    B12_W = B12_0
+    B23_W = B23_0
+    C13_W = C13_0
+    A11_W .= coeffs[8] .* A11_6 .+ coeffs[6] .* A11_4 .+ coeffs[4] .* A11_2 .+
+             coeffs[2] .* A11_0
+    A22_W .= coeffs[8] .* A22_6 .+ coeffs[6] .* A22_4 .+ coeffs[4] .* A22_2 .+
+             coeffs[2] .* A22_0
+    A33_W .= coeffs[8] .* A33_6 .+ coeffs[6] .* A33_4 .+ coeffs[4] .* A33_2 .+
+             coeffs[2] .* A33_0
+    B12_W .= coeffs[8] .* B12_6 .+ coeffs[6] .* B12_4 .+ coeffs[4] .* B12_2 .+
+             coeffs[2] .* B12_0
+    B23_W .= coeffs[8] .* B23_6 .+ coeffs[6] .* B23_4 .+ coeffs[4] .* B23_2 .+
+             coeffs[2] .* B23_0
+    C13_W .= coeffs[8] .* C13_6 .+ coeffs[6] .* C13_4 .+ coeffs[4] .* C13_2 .+
+             coeffs[2] .* C13_0
 
     A11_U = mul!(A11_2, A11, A11_W)
     A22_U = mul!(A22_2, A22, A22_W)
@@ -345,12 +434,12 @@ function exp_blocktriangular2_pade7(A11, A22, A33, B12, B23)
     C13_V .-= C13_U
 
     return A11_0, A11_V, A22_0, A22_V, A33_0, A33_V,
-            B12_0, B12_V, B23_0, B23_V, C13_0, C13_V
+           B12_0, B12_V, B23_0, B23_V, C13_0, C13_V
 end
 
 function exp_blocktriangular2_pade5(A11, A22, A33, B12, B23)
     T = eltype(A11)
-    coeffs = T[30240., 15120., 3360., 420., 30., 1.]
+    coeffs = T[30240.0, 15120.0, 3360.0, 420.0, 30.0, 1.0]
 
     A11_0 = one(A11)
     A22_0 = one(A22)
@@ -378,7 +467,12 @@ function exp_blocktriangular2_pade5(A11, A22, A33, B12, B23)
     B23_V = coeffs[5] .* B23_4 .+ coeffs[3] .* B23_2 .+ coeffs[1] .* B23_0
     C13_V = coeffs[5] .* C13_4 .+ coeffs[3] .* C13_2 .+ coeffs[1] .* C13_0
 
-    A11_W = A11_0; A22_W = A22_0; A33_W = A33_0; B12_W = B12_0; B23_W = B23_0; C13_W = C13_0
+    A11_W = A11_0
+    A22_W = A22_0
+    A33_W = A33_0
+    B12_W = B12_0
+    B23_W = B23_0
+    C13_W = C13_0
     A11_W .= coeffs[6] .* A11_4 .+ coeffs[4] .* A11_2 .+ coeffs[2] .* A11_0
     A22_W .= coeffs[6] .* A22_4 .+ coeffs[4] .* A22_2 .+ coeffs[2] .* A22_0
     A33_W .= coeffs[6] .* A33_4 .+ coeffs[4] .* A33_2 .+ coeffs[2] .* A33_0
@@ -407,12 +501,12 @@ function exp_blocktriangular2_pade5(A11, A22, A33, B12, B23)
     C13_V .-= C13_U
 
     return A11_0, A11_V, A22_0, A22_V, A33_0, A33_V,
-            B12_0, B12_V, B23_0, B23_V, C13_0, C13_V
+           B12_0, B12_V, B23_0, B23_V, C13_0, C13_V
 end
 
 function exp_blocktriangular2_pade3(A11, A22, A33, B12, B23)
     T = eltype(A11)
-    coeffs = T[120., 60., 12., 1.]
+    coeffs = T[120.0, 60.0, 12.0, 1.0]
 
     A11_0 = one(A11)
     A22_0 = one(A22)
@@ -434,7 +528,12 @@ function exp_blocktriangular2_pade3(A11, A22, A33, B12, B23)
     B23_V = coeffs[3] .* B23_2 .+ coeffs[1] .* B23_0
     C13_V = coeffs[3] .* C13_2 .+ coeffs[1] .* C13_0
 
-    A11_W = A11_0; A22_W = A22_0; A33_W = A33_0; B12_W = B12_0; B23_W = B23_0; C13_W = C13_0
+    A11_W = A11_0
+    A22_W = A22_0
+    A33_W = A33_0
+    B12_W = B12_0
+    B23_W = B23_0
+    C13_W = C13_0
     A11_W .= coeffs[4] .* A11_2 .+ coeffs[2] .* A11_0
     A22_W .= coeffs[4] .* A22_2 .+ coeffs[2] .* A22_0
     A33_W .= coeffs[4] .* A33_2 .+ coeffs[2] .* A33_0
@@ -463,5 +562,5 @@ function exp_blocktriangular2_pade3(A11, A22, A33, B12, B23)
     C13_V .-= C13_U
 
     return A11_0, A11_V, A22_0, A22_V, A33_0, A33_V,
-            B12_0, B12_V, B23_0, B23_V, C13_0, C13_V
+           B12_0, B12_V, B23_0, B23_V, C13_0, C13_V
 end
