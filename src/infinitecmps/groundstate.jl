@@ -597,3 +597,403 @@ function groundstate(H::LocalHamiltonian, Ψ₀::FourierCMPS;
     normgrad = sqrt(inner(x, grad, grad))
     return ΨL, one(ρR), ρR, E, e, normgrad, numfg, history
 end
+
+function groundstate_diagonal(H::LocalHamiltonian, Ψ₀::UniformCMPS, V, Ss;
+                        optalg = ConjugateGradient(; verbosity = 2, gradtol = 1e-7),
+                        eigalg = defaulteigalg(Ψ₀),
+                        linalg = defaultlinalg(Ψ₀),
+                        finalize! = OptimKit._finalize!,
+                        kwargs...)
+
+    δ = 1e-3
+    function retract(x, d, α)
+        ΨL, V, Ss, = x
+        QL = ΨL.Q
+        RLs = ΨL.Rs
+        KL = copy(QL)
+        for R in RLs
+            mul!(KL, R', R, +1/2, 1)
+        end
+
+        dX, dSs = d
+
+        dRs = Ref(dX) .* RLs .+ Ref(V) .* dSs .* Ref(inv(V)) .- RLs .* Ref(dX)
+        RdR = zero(KL)
+        for (R, dR) in zip(RLs, dRs)
+            mul!(RdR, R', dR, true, true)
+        end
+
+        V = Constant(exp(α * dX[])) * V
+        Ss = Ss .+ α .* dSs
+
+        RLs = Ref(V) .* Ss .* Ref(inv(V))
+        KL = KL - (α/2) * (RdR - RdR')
+        QL = KL
+        for R in RLs
+            mul!(QL, R', R, -1/2, 1)
+        end
+        d = (dX, dSs)
+
+        ΨL = InfiniteCMPS(QL, RLs; gauge = :left)
+        ρR, _, infoR = rightenv(ΨL; eigalg = eigalg, linalg = linalg, kwargs...)
+        rmul!(ρR, 1/tr(ρR[]))
+        ρL = one(ρR)
+        HL, E, e, hL, infoL =
+            leftenv(H, (ΨL,ρL,ρR); eigalg = eigalg, linalg = linalg, kwargs...)
+
+        if infoR.converged == 0 || infoL.converged == 0
+            @warn "step $α : not converged, energy = $e"
+            @show infoR
+            @show infoL
+        end
+
+        return (ΨL, V, Ss, ρR, HL, E, e, hL), d
+    end
+
+    transport!(v, x, d, α, xnew) = v # simplest possible transport
+
+    function inner(x, d1, d2)
+        dV1, dSs1 = d1
+        dV2, dSs2 = d2
+        s = dV1 === dV2 ? 2*norm(dV1)^2 : 2*real(dot(dV1, dV2))
+        for (dSs1,dSs2) in zip(dSs1, dSs2)
+            if dSs1 === dSs2
+                s += 2*norm(dSs1)^2
+            else
+                s += 2*real(dot(dSs1, dSs2))
+            end
+        end
+        return s
+    end
+
+    function precondition(x, d)
+        _, V, Ss, ρR, = x
+        copy_S = deepcopy.(Ss)
+        Rs = broadcast(x->V*x*inv(V),copy_S)
+        dX, dSs = d
+
+        dvec = RecursiveVec(dX,dSs...)
+
+        # turn [dX; dSs] into one large vector and vice versa
+        vec_size = length(dX[])+sum(length(diag(s[])) for s in dSs)
+        function vectorize(vec)
+            cp_dX = deepcopy(dX)
+            copyto!(cp_dX[],vec[1:length(cp_dX[])])
+            cp_dSs = deepcopy.(dSs)
+
+            offset = length(dX[])
+            for s in cp_dSs
+                for i in diagind(s[])
+                    offset +=1
+                    s[][i] = vec[offset]
+                end
+                
+            end
+
+            @assert offset ==  length(vec)
+
+            return (cp_dX,cp_dSs...)
+        end
+        unvectorize(tup) = reduce(vcat,[tup[1][][:], [diag(t[]) for t in tup[2:end]]...])
+
+        function linear_problem(x)
+            dX = x[1]
+            _dSs = x[2:end]
+            
+            dRs = Ref(dX) .* Rs .+ Ref(V) .* _dSs .* Ref(inv(V)) .- Rs .* Ref(dX)
+ 
+            dRs = dRs .* Ref(ρR)
+ 
+            _dSs = Constant.(diagm.((diag.(broadcast(x->x[],(Ref(V') .* dRs .* Ref(inv(V)')))))))
+            dX = sum((dRs .* adjoint.(Rs) .- adjoint.(Rs) .* dRs))
+            
+            bonddim = size(V[],1)
+            for i in 1:bonddim
+                d = zeros(bonddim)
+                d[i] = 1
+                s = V[] * diagm(d) * inv(V[])
+                dX[] -= dot(s,dX[])/dot(s,s)*s
+            end
+ 
+            RecursiveVec(dX,_dSs...)
+        end
+        
+        m = reduce(hcat,map(1:vec_size) do i
+            b = zeros(vec_size)
+            b[i] = 1
+            unvectorize(linear_problem(vectorize(b)))
+        end)
+          
+        dnew = vectorize((δ*one(m) + m)\unvectorize(dvec))
+        
+        preconditioned_gradient = (dnew[1],dnew[2:end])
+        return preconditioned_gradient
+    end
+
+    function fg(x)
+        (ΨL, V, Ss, ρR, HL, E, e, hL) = x
+
+        gradQ, gradRs = gradient(H, (ΨL, one(ρR), ρR), HL, zero(HL); kwargs...)
+
+        Q = ΨL.Q
+        Rs = ΨL.Rs
+
+        dRs = .-(Rs) .* Ref(gradQ) .+ gradRs
+
+        dSs = Constant.(diagm.((diag.(broadcast(x->x[],(Ref(V') .* dRs .* Ref(inv(V)')))))))
+
+        dX = sum((dRs .* adjoint.(Rs) .- adjoint.(Rs) .* dRs))
+        
+        bonddim = size(V[],1)
+        for i in 1:bonddim
+            d = zeros(bonddim)
+            d[i] = 1
+            s = V[] * diagm(d) * inv(V[])
+            dX[] -= dot(s,dX[])/dot(s,s)*s
+        end
+
+        return E, (dX, dSs)
+    end
+
+    function scale!(d, α)
+        dV, dSs = d
+        rmul!(dV, α)
+        for dS in dSs
+            rmul!(dS, α)
+        end
+        return d
+    end
+    function add!(d1, d2, α)
+        dV1, dS1s = d1
+        dV2, dS2s = d2
+        axpy!(α, dV2, dV1)
+        for (dS1, dS2) in zip(dS1s, dS2s)
+            axpy!(α, dS2, dS1)
+        end
+        return d1
+    end
+
+    function _finalize!(x, E, d, numiter)
+        normgrad2 = real(inner(x, d, d))
+        δ = max(1e-12, 1e-2*normgrad2)
+        return finalize!(x, E, d, numiter)
+    end
+
+    ΨL₀ = Ψ₀
+    ρR, _, infoR = rightenv(ΨL₀; kwargs...)
+    ρL = one(ρR)
+    rmul!(ρR, 1/tr(ρR[]))
+    HL, E, e, hL, infoL = leftenv(H, (ΨL₀,ρL,ρR); kwargs...)
+    x = (ΨL₀, V, Ss, ρR, HL, E, e, hL)
+
+    x, E, normgrad, numfg, history =
+    optimize(fg, x, optalg; retract = retract,
+                            finalize! = _finalize!,
+                            precondition = precondition,
+                            inner = inner, transport! = transport!,
+                            scale! = scale!, add! = add!,
+                            isometrictransport = true)
+
+    (ΨL, V, Ss, ρR, HL, E, e, hL) = x
+    return ΨL, ρR, E, e, normgrad, numfg, history, V, Ss
+end
+
+function groundstate_diagonal2(H::LocalHamiltonian, Ψ₀::UniformCMPS, V, Ss;
+                        optalg = ConjugateGradient(; verbosity = 2, gradtol = 1e-7),
+                        eigalg = defaulteigalg(Ψ₀),
+                        linalg = defaultlinalg(Ψ₀),
+                        finalize! = OptimKit._finalize!,
+                        kwargs...)
+
+    δ = 1e-3
+    function retract(x, d, α)
+        ΨL, V, Ss, = x
+        QL = ΨL.Q
+        RLs = ΨL.Rs
+        KL = copy(QL)
+        for R in RLs
+            mul!(KL, R', R, +1/2, 1)
+        end
+
+        dX, dSs = d
+
+        dRs = Ref(dX) .* RLs .+ Ref(V) .* dSs .* Ref(inv(V)) .- RLs .* Ref(dX)
+        RdR = zero(KL)
+        for (R, dR) in zip(RLs, dRs)
+            mul!(RdR, R', dR, true, true)
+        end
+
+        V = Constant(exp(α * dX[])) * V
+        Ss = Ss .+ α .* dSs
+
+        RLs = Ref(V) .* Ss .* Ref(inv(V))
+        KL = KL - (α/2) * (RdR - RdR')
+        QL = KL
+        for R in RLs
+            mul!(QL, R', R, -1/2, 1)
+        end
+        d = (dX, dSs)
+
+        ΨL = InfiniteCMPS(QL, RLs; gauge = :left)
+        ρR, _, infoR = rightenv(ΨL; eigalg = eigalg, linalg = linalg, kwargs...)
+        rmul!(ρR, 1/tr(ρR[]))
+        ρL = one(ρR)
+        HL, E, e, hL, infoL =
+            leftenv(H, (ΨL,ρL,ρR); eigalg = eigalg, linalg = linalg, kwargs...)
+
+        if infoR.converged == 0 || infoL.converged == 0
+            @warn "step $α : not converged, energy = $e"
+            @show infoR
+            @show infoL
+        end
+
+        return (ΨL, V, Ss, ρR, HL, E, e, hL), d
+    end
+
+    transport!(v, x, d, α, xnew) = v # simplest possible transport
+
+    function inner(x, d1, d2)
+        dV1, dSs1 = d1
+        dV2, dSs2 = d2
+        s = dV1 === dV2 ? 2*norm(dV1)^2 : 2*real(dot(dV1, dV2))
+        for (dSs1,dSs2) in zip(dSs1, dSs2)
+            if dSs1 === dSs2
+                s += 2*norm(dSs1)^2
+            else
+                s += 2*real(dot(dSs1, dSs2))
+            end
+        end
+        return s
+    end
+
+    function precondition(x, d)
+        _, V, Ss, ρR, = x
+        copy_S = deepcopy.(Ss)
+        Rs = broadcast(x->V*x*inv(V),copy_S)
+        dX, dSs = d
+
+        dvec = RecursiveVec(dX,dSs...)
+
+        # turn [dX; dSs] into one large vector and vice versa
+        vec_size = length(dX[])+sum(length(diag(s[])) for s in dSs)
+        function vectorize(vec)
+            cp_dX = deepcopy(dX)
+            copyto!(cp_dX[],vec[1:length(cp_dX[])])
+            cp_dSs = deepcopy.(dSs)
+
+            offset = length(dX[])
+            for s in cp_dSs
+                for i in diagind(s[])
+                    offset +=1
+                    s[][i] = vec[offset]
+                end
+                
+            end
+
+            @assert offset ==  length(vec)
+
+            return (cp_dX,cp_dSs...)
+        end
+        unvectorize(tup) = reduce(vcat,[tup[1][][:], [diag(t[]) for t in tup[2:end]]...])
+
+        function linear_problem(x)
+            dX = x[1]
+            _dSs = x[2:end]
+            
+            dRs = Ref(dX) .* Rs .+ Ref(V) .* _dSs .* Ref(inv(V)) .- Rs .* Ref(dX)
+ 
+            dRs = dRs .* Ref(ρR)
+ 
+            _dSs = Constant.(diagm.((diag.(broadcast(x->x[],(Ref(V') .* dRs .* Ref(inv(V)')))))))
+            dX = sum((dRs .* adjoint.(Rs) .- adjoint.(Rs) .* dRs))
+            
+            bonddim = size(V[],1)
+            for i in 1:bonddim
+                d = zeros(bonddim)
+                d[i] = 1
+                s = V[] * diagm(d) * inv(V[])
+                dX[] -= dot(s,dX[])/dot(s,s)*s
+            end
+ 
+            RecursiveVec(dX,_dSs...)
+        end
+        
+        m = reduce(hcat,map(1:vec_size) do i
+            b = zeros(vec_size)
+            b[i] = 1
+            unvectorize(linear_problem(vectorize(b)))
+        end)
+          
+        dnew = vectorize((δ*one(m) + m)\unvectorize(dvec))
+        
+        preconditioned_gradient = (dnew[1],dnew[2:end])
+        return preconditioned_gradient
+    end
+
+    function fg(x)
+        (ΨL, V, Ss, ρR, HL, E, e, hL) = x
+
+        gradQ, gradRs = gradient(H, (ΨL, one(ρR), ρR), HL, zero(HL); kwargs...)
+
+        Q = ΨL.Q
+        Rs = ΨL.Rs
+
+        dRs = .-(Rs) .* Ref(gradQ) .+ gradRs
+
+        dSs = Constant.(diagm.((diag.(broadcast(x->x[],(Ref(V') .* dRs .* Ref(inv(V)')))))))
+
+        dX = sum((dRs .* adjoint.(Rs) .- adjoint.(Rs) .* dRs))
+        
+        bonddim = size(V[],1)
+        for i in 1:bonddim
+            d = zeros(bonddim)
+            d[i] = 1
+            s = V[] * diagm(d) * inv(V[])
+            dX[] -= dot(s,dX[])/dot(s,s)*s
+        end
+
+        return E, (dX, dSs)
+    end
+
+    function scale!(d, α)
+        dV, dSs = d
+        rmul!(dV, α)
+        for dS in dSs
+            rmul!(dS, α)
+        end
+        return d
+    end
+    function add!(d1, d2, α)
+        dV1, dS1s = d1
+        dV2, dS2s = d2
+        axpy!(α, dV2, dV1)
+        for (dS1, dS2) in zip(dS1s, dS2s)
+            axpy!(α, dS2, dS1)
+        end
+        return d1
+    end
+
+    function _finalize!(x, E, d, numiter)
+        normgrad2 = real(inner(x, d, d))
+        δ = max(1e-12, 1e-2*normgrad2)
+        return finalize!(x, E, d, numiter)
+    end
+
+    ΨL₀ = Ψ₀
+    ρR, _, infoR = rightenv(ΨL₀; kwargs...)
+    ρL = one(ρR)
+    rmul!(ρR, 1/tr(ρR[]))
+    HL, E, e, hL, infoL = leftenv(H, (ΨL₀,ρL,ρR); kwargs...)
+    x = (ΨL₀, V, Ss, ρR, HL, E, e, hL)
+
+    x, E, normgrad, numfg, history =
+    optimize(fg, x, optalg; retract = retract,
+                            finalize! = _finalize!,
+                            precondition = precondition,
+                            inner = inner, transport! = transport!,
+                            scale! = scale!, add! = add!,
+                            isometrictransport = true)
+
+    (ΨL, V, Ss, ρR, HL, E, e, hL) = x
+    return ΨL, ρR, E, e, normgrad, numfg, history, V, Ss
+end
