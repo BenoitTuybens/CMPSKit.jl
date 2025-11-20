@@ -798,7 +798,7 @@ function groundstate_diagonal(H::LocalHamiltonian, Ψ₀::UniformCMPS, V, Ss;
     return ΨL, ρR, E, e, normgrad, numfg, history, V, Ss
 end
 
-function groundstate_diagonal2(H::LocalHamiltonian, Ψ₀::UniformCMPS, V, Ss;
+function groundstate_diagonal2(H::LocalHamiltonian, Ψ₀::UniformCMPS;
                         optalg = ConjugateGradient(; verbosity = 2, gradtol = 1e-7),
                         eigalg = defaulteigalg(Ψ₀),
                         linalg = defaultlinalg(Ψ₀),
@@ -807,39 +807,28 @@ function groundstate_diagonal2(H::LocalHamiltonian, Ψ₀::UniformCMPS, V, Ss;
 
     δ = 1e-3
     function retract(x, d, α)
-        ΨL, V, Ss, = x
-        QL = ΨL.Q
-        RLs = ΨL.Rs
-        KL = copy(QL)
-        for R in RLs
-            mul!(KL, R', R, +1/2, 1)
-        end
+        Ψ, ρL, ρR, = x
+        Q = Ψ.Q
+        Rs = Ψ.Rs
 
-        dX, dSs = d
+        dQ, dRs = d
 
-        dRs = Ref(dX) .* RLs .+ Ref(V) .* dSs .* Ref(inv(V)) .- RLs .* Ref(dX)
-        RdR = zero(KL)
-        for (R, dR) in zip(RLs, dRs)
-            mul!(RdR, R', dR, true, true)
-        end
+        Rs = Rs .+ α .* dRs
+        Q = Q + α * dQ
 
-        V = Constant(exp(α * dX[])) * V
-        Ss = Ss .+ α .* dSs
+        Ψ = InfiniteCMPS(Q, Rs)
+        ρR, λ, infoR = rightenv(Ψ; eigalg = eigalg, linalg = linalg, kwargs...)
 
-        RLs = Ref(V) .* Ss .* Ref(inv(V))
-        KL = KL - (α/2) * (RdR - RdR')
-        QL = KL
-        for R in RLs
-            mul!(QL, R', R, -1/2, 1)
-        end
-        d = (dX, dSs)
+        ρL, ρR, = environments!(Ψ; eigalg = eigalg, linalg = linalg, kwargs...)
+        #ρR, λ, infoR = rightenv(ΨL; eigalg = eigalg, linalg = linalg, kwargs...)
+        #rmul!(ρR, 1/tr(ρR[]))
+        #ρL = one(ρR)
+        HL, E, e, hL, infoL = leftenv(H, (Ψ,ρL,ρR); eigalg = eigalg, linalg = linalg, kwargs...)
+        HR, E, e, hR, infoR = rightenv(H, (Ψ,ρL,ρR); eigalg = eigalg, linalg = linalg, kwargs...)
 
-        ΨL = InfiniteCMPS(QL, RLs; gauge = :left)
-        ρR, _, infoR = rightenv(ΨL; eigalg = eigalg, linalg = linalg, kwargs...)
-        rmul!(ρR, 1/tr(ρR[]))
-        ρL = one(ρR)
-        HL, E, e, hL, infoL =
-            leftenv(H, (ΨL,ρL,ρR); eigalg = eigalg, linalg = linalg, kwargs...)
+
+        dQ = dQ - (λ/α)*one(Q)
+        d = dQ, dRs
 
         if infoR.converged == 0 || infoL.converged == 0
             @warn "step $α : not converged, energy = $e"
@@ -847,153 +836,71 @@ function groundstate_diagonal2(H::LocalHamiltonian, Ψ₀::UniformCMPS, V, Ss;
             @show infoL
         end
 
-        return (ΨL, V, Ss, ρR, HL, E, e, hL), d
+        return (Ψ, ρL, ρR, HL, HR, E, e, hL, hR), d
     end
 
     transport!(v, x, d, α, xnew) = v # simplest possible transport
 
     function inner(x, d1, d2)
-        dV1, dSs1 = d1
-        dV2, dSs2 = d2
-        s = dV1 === dV2 ? 2*norm(dV1)^2 : 2*real(dot(dV1, dV2))
-        for (dSs1,dSs2) in zip(dSs1, dSs2)
-            if dSs1 === dSs2
-                s += 2*norm(dSs1)^2
+        dQ1, dR1 = d1
+        dQ2, dR2 = d2
+        s = dQ1 === dQ2 ? 2*norm(dQ1)^2 : 2*real(dot(dQ1, dQ2))
+        for (dR1,dR2) in zip(dR1, dR2)
+            if dR1 === dR2
+                s += 2*norm(dR1)^2
             else
-                s += 2*real(dot(dSs1, dSs2))
+                s += 2*real(dot(dR1, dR2))
             end
         end
         return s
     end
 
-    function precondition(x, d)
-        _, V, Ss, ρR, = x
-        copy_S = deepcopy.(Ss)
-        Rs = broadcast(x->V*x*inv(V),copy_S)
-        dX, dSs = d
-
-        dvec = RecursiveVec(dX,dSs...)
-
-        # turn [dX; dSs] into one large vector and vice versa
-        vec_size = length(dX[])+sum(length(diag(s[])) for s in dSs)
-        function vectorize(vec)
-            cp_dX = deepcopy(dX)
-            copyto!(cp_dX[],vec[1:length(cp_dX[])])
-            cp_dSs = deepcopy.(dSs)
-
-            offset = length(dX[])
-            for s in cp_dSs
-                for i in diagind(s[])
-                    offset +=1
-                    s[][i] = vec[offset]
-                end
-                
-            end
-
-            @assert offset ==  length(vec)
-
-            return (cp_dX,cp_dSs...)
-        end
-        unvectorize(tup) = reduce(vcat,[tup[1][][:], [diag(t[]) for t in tup[2:end]]...])
-
-        function linear_problem(x)
-            dX = x[1]
-            _dSs = x[2:end]
-            
-            dRs = Ref(dX) .* Rs .+ Ref(V) .* _dSs .* Ref(inv(V)) .- Rs .* Ref(dX)
- 
-            dRs = dRs .* Ref(ρR)
- 
-            _dSs = Constant.(diagm.((diag.(broadcast(x->x[],(Ref(V') .* dRs .* Ref(inv(V)')))))))
-            dX = sum((dRs .* adjoint.(Rs) .- adjoint.(Rs) .* dRs))
-            
-            bonddim = size(V[],1)
-            for i in 1:bonddim
-                d = zeros(bonddim)
-                d[i] = 1
-                s = V[] * diagm(d) * inv(V[])
-                dX[] -= dot(s,dX[])/dot(s,s)*s
-            end
- 
-            RecursiveVec(dX,_dSs...)
-        end
-        
-        m = reduce(hcat,map(1:vec_size) do i
-            b = zeros(vec_size)
-            b[i] = 1
-            unvectorize(linear_problem(vectorize(b)))
-        end)
-          
-        dnew = vectorize((δ*one(m) + m)\unvectorize(dvec))
-        
-        preconditioned_gradient = (dnew[1],dnew[2:end])
-        return preconditioned_gradient
-    end
-
     function fg(x)
-        (ΨL, V, Ss, ρR, HL, E, e, hL) = x
+        (Ψ, ρL, ρR, HL, HR, E, e, hL, hR) = x
 
-        gradQ, gradRs = gradient(H, (ΨL, one(ρR), ρR), HL, zero(HL); kwargs...)
+        gradQ, gradRs = gradient(H, (Ψ, ρL, ρR), HL, HR; kwargs...)
 
-        Q = ΨL.Q
-        Rs = ΨL.Rs
+        gradRs = (Constant(diagm(diag(gradRs[1][]))), Constant(diagm(diag(gradRs[2][]))))
 
-        dRs = .-(Rs) .* Ref(gradQ) .+ gradRs
-
-        dSs = Constant.(diagm.((diag.(broadcast(x->x[],(Ref(V') .* dRs .* Ref(inv(V)')))))))
-
-        dX = sum((dRs .* adjoint.(Rs) .- adjoint.(Rs) .* dRs))
-        
-        bonddim = size(V[],1)
-        for i in 1:bonddim
-            d = zeros(bonddim)
-            d[i] = 1
-            s = V[] * diagm(d) * inv(V[])
-            dX[] -= dot(s,dX[])/dot(s,s)*s
-        end
-
-        return E, (dX, dSs)
+        return E, (gradQ, gradRs)
     end
 
     function scale!(d, α)
-        dV, dSs = d
-        rmul!(dV, α)
-        for dS in dSs
-            rmul!(dS, α)
+        dQ, dRs = d
+        rmul!(dQ, α)
+        for dR in dRs
+            rmul!(dR, α)
         end
         return d
     end
     function add!(d1, d2, α)
-        dV1, dS1s = d1
-        dV2, dS2s = d2
-        axpy!(α, dV2, dV1)
-        for (dS1, dS2) in zip(dS1s, dS2s)
-            axpy!(α, dS2, dS1)
+        dQ1, dR1s = d1
+        dQ2, dR2s = d2
+        axpy!(α, dQ2, dQ1)
+        for (dR1, dR2) in zip(dR1s, dR2s)
+            axpy!(α, dR2, dR1)
         end
         return d1
     end
-
     function _finalize!(x, E, d, numiter)
         normgrad2 = real(inner(x, d, d))
-        δ = max(1e-12, 1e-2*normgrad2)
+        @show normgrad2
+        δ = max(1e-12, 1e-3*normgrad2)
         return finalize!(x, E, d, numiter)
     end
 
-    ΨL₀ = Ψ₀
-    ρR, _, infoR = rightenv(ΨL₀; kwargs...)
-    ρL = one(ρR)
-    rmul!(ρR, 1/tr(ρR[]))
-    HL, E, e, hL, infoL = leftenv(H, (ΨL₀,ρL,ρR); kwargs...)
-    x = (ΨL₀, V, Ss, ρR, HL, E, e, hL)
+    ρL, ρR, λ, infoR = environments!(Ψ₀; kwargs...)
 
-    x, E, normgrad, numfg, history =
-    optimize(fg, x, optalg; retract = retract,
-                            finalize! = _finalize!,
-                            precondition = precondition,
-                            inner = inner, transport! = transport!,
-                            scale! = scale!, add! = add!,
-                            isometrictransport = true)
+    HL, E, e, hL, infoL = leftenv(H, (Ψ₀,ρL,ρR); kwargs...)
+    HR, E, e, hR, infoR = rightenv(H, (Ψ₀,ρL,ρR); kwargs...)
+    x = (Ψ₀, ρL, ρR, HL, HR, E, e, hL, hR)
 
-    (ΨL, V, Ss, ρR, HL, E, e, hL) = x
-    return ΨL, ρR, E, e, normgrad, numfg, history, V, Ss
+    x, E, normgrad, numfg, history = optimize(fg, x, optalg; retract = retract,
+                                finalize! = _finalize!,
+                                inner = inner, transport! = transport!,
+                                scale! = scale!, add! = add!,
+                                isometrictransport = true)
+
+    (Ψ, ρL, ρR, HL, HR, E, e, hL, hR) = x
+    return Ψ, ρL, ρR, E, e, normgrad, numfg, history
 end

@@ -9,7 +9,7 @@ export InfiniteCMPS, FiniteCMPS, CircularCMPS, LeftTransfer, RightTransfer,
 export Constant, FourierSeries, TaylorSeries, PiecewiseLinear
 export fit, differentiate, integrate, localdot, domain, period, nummodes, density
 export leftreducedoperator, rightreducedoperator, expval, gradient, groundstate
-export groundstate2, centergradient
+export groundstate2, centergradient, groundstate_diagonal, groundstate_diagonal2
 export excitation_operator
 
 export norm, normalize, normalize!, dot, isapprox, tr, partialtrace1, partialtrace2

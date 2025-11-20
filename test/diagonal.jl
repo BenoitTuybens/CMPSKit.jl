@@ -78,6 +78,13 @@ end
 @show expval(ψ[1]'*ψ[1] + ψ[2]'*ψ[2],Ψ)[]
 
 Ψ_new, V_new, Ss_new = expand(Ψ)
+Ψ, ρL, ρR, E2, e, normgrad, numfg, history = groundstate_diagonal2(H, Ψ_new; optalg = LBFGS(; verbosity = 4, maxiter = 500, gradtol = 1e-3), linalg = linalg)
+
+V = eigvecs(Ψ.Rs[1][])
+S1 = diagm(diag((inv(V) * Ψ.Rs[1][] * V)))
+S2 = diagm(diag((inv(V) * Ψ.Rs[2][] * V)))
+Ss = (S1,S2)
+Ψ_new, V_new, Ss_new = Ψ, V, Ss
 Ψ, ρR, E2, e, normgrad, numfg, history = groundstate_diagonal(H, Ψ_new, V_new, Ss_new; optalg = alg2, linalg = linalg)
 @show E2
 @show expval(ψ[1]*ψ[2] - ψ[2]*ψ[1],Ψ)[]
