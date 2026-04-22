@@ -699,39 +699,26 @@ function groundstate_MDMinv(H::LocalHamiltonian, Ψ₀::UniformCMPS;
                         optalg = ConjugateGradient(; verbosity = 2, gradtol = 1e-7),
                         eigalg = defaulteigalg(Ψ₀),
                         linalg = defaultlinalg(Ψ₀),
-                        finalize! = OptimKit._finalize!,
                         kwargs...)
 
-    δ = 1e-3
+    δ = 1e-3                    # used for preconditioner regularization
+    αcache = 1.0                # used for δ*α regularization
+    P_qr = nothing              # cached qr(P) factorization
+    x0_vec = nothing            # cached Krylov initial guess in packed-vector form
     function retract(x, d, α)
-        ΨL, M, Ds, = x
+        ΨL, M, Minv, Ds, = x
         dX, dDs = d
 
-        QL = ΨL.Q
-        RLs = ΨL.Rs
-        KL = copy(QL)
-        for R in RLs
-            mul!(KL, R', R, +1/2, 1)
-        end
-
-        dRs = Ref(dX) .* RLs .+ Ref(M) .* dDs .* Ref(inv(M)) .- RLs .* Ref(dX)
-        RdR = zero(KL)
-        for (R, dR) in zip(RLs, dRs)
-            mul!(RdR, R', dR, true, true)
-        end
-
-        M = Constant(exp(α * dX[])) * M
+        M =   M * Constant(exp(α * dX[]))
+        Minv = Constant(exp(-α * dX[])) * Minv
         Ds = Ds .+ α .* dDs
 
-        RLs = Ref(M) .* Ds .* Ref(inv(M))
-        KL = KL - (α/2) * (RdR - RdR')
-        QL = KL
-        for R in RLs
-            mul!(QL, R', R, -1/2, 1)
-        end
-        d = (dX, dDs)
+        Rs_new = map(D -> M * D * Minv, Ds) 
+        ΔRs = Rs_new .- ΨL.Rs
 
-        ΨL = InfiniteCMPS(QL, RLs; gauge = :left)
+        QL_new = ΨL.Q - sum([R' * ΔR + 0.5 * ΔR' * ΔR for (R, ΔR) in zip(ΨL.Rs, ΔRs)])
+
+        ΨL = InfiniteCMPS(QL_new, Rs_new; gauge = :left)
         ρR, _, infoR = rightenv(ΨL; eigalg = eigalg, linalg = linalg, kwargs...)
         rmul!(ρR, 1/tr(ρR[]))
         ρL = one(ρR)
@@ -744,7 +731,7 @@ function groundstate_MDMinv(H::LocalHamiltonian, Ψ₀::UniformCMPS;
             @show infoL
         end
 
-        return (ΨL, M, Ds, ρR, HL, E, e, hL), d
+        return (ΨL, M, Minv, Ds, ρR, HL, E, e, hL), d
     end
 
     transport!(v, x, d, α, xnew) = v # simplest possible transport
@@ -752,105 +739,283 @@ function groundstate_MDMinv(H::LocalHamiltonian, Ψ₀::UniformCMPS;
     function inner(x, d1, d2)
         dX1, dDs1 = d1
         dX2, dDs2 = d2
-        s = dX1 === dX2 ? 2*norm(dX1)^2 : 2*real(dot(dX1, dX2))
+        s = dX1 === dX2 ? norm(dX1)^2 : real(dot(dX1, dX2))
         for (dD1,dD2) in zip(dDs1, dDs2)
             if dD1 === dD2
-                s += 2*norm(dD1)^2
+                s += norm(dD1)^2
             else
-                s += 2*real(dot(dD1, dD2))
+                s += real(dot(dD1, dD2))
             end
         end
         return s
     end
 
-    function precondition!(x, d)
-        _, M, Ds, ρR, = x
+    function precondition_full!(x, d)
+               # x = (ΨL, M, Minv, Ds, ρR, HL, E, e, hL)
+        _, M, Minv, Ds, ρR, _, _, _, _ = x
         dX, dDs = d
 
-        copy_Ss = deepcopy.(Ds)
-        Rs = broadcast(x->M*x*inv(M),copy_Ss)
-        
-        dvec = RecursiveVec(dX, dDs...)
+        χ = size(M[], 1)
+        dcomp = length(Ds)
+        n = χ^2 + dcomp*χ
 
-        # turn [dX; dDs] into one large vector and vice versa
-        vec_size = length(dX[]) + sum(length(diag(s[])) for s in dDs)
-        
-        function vectorize(vec)
-            cp_dX = deepcopy(dX)
-            copyto!(cp_dX[],vec[1:length(cp_dX[])])
-            cp_dDs = deepcopy.(dDs)
+        # PSD-stabilized rhoR
+        U, S, _ = svd(ρR[])
+        ρRmat = U * Diagonal(S) * U'
 
-            offset = length(dX[])
-            for s in cp_dDs
-                for i in diagind(s[])
-                    offset +=1
-                    s[][i] = vec[offset]
-                end
-                
-            end
+        EL = M'[] * M[]
+        ER = Minv[] * ρRmat * (Minv)'[]
 
-            @assert offset ==  length(vec)
+        # tangent mapping
+        function _f(rv)
+            _dX = rv[1]
+            _dDs = rv[2:end]
 
-            return (cp_dX,cp_dDs...)
+            prec = [EL * (_dX[] * D[] - D[] * _dX[] + dD[]) * ER for (dD, D) in zip(_dDs, Ds)]
+
+            dX_mapped = Constant(sum([S * D'[] - D'[] * S for (S, D) in zip(prec, Ds)]))
+            dX_mapped[][diagind(dX_mapped[])] .= 0
+
+            dDs_mapped = Constant.(diagm.(diag.(prec)))
+            return RecursiveVec(dX_mapped, dDs_mapped...)
         end
-        unvectorize(tup) = reduce(vcat,[tup[1][][:], [diag(t[]) for t in tup[2:end]]...])
 
-        function linear_problem(x)
-            dX = x[1]
-            _dDs = x[2:end]
+        # (A + reg)(v) = _f(v) + reg(v), reg: δ on dDs, δ*α on dX
+        Aplusreg = function(v)
+            _dX = copy(reshape(view(v, 1:χ^2), χ, χ))
+            off = χ^2
+            _dDs = ntuple(k -> begin
+                dD = v[off+1:off+χ]
+                off += χ
+                Constant(diagm(dD))
+            end, dcomp)
+
+            rv = RecursiveVec(Constant(_dX), _dDs...)
             
-            dRs = Ref(dX) .* Rs .+ Ref(M) .* _dDs .* Ref(inv(M)) .- Rs .* Ref(dX)
- 
-            dRs = dRs .* Ref(ρR)
- 
-            _dDs = Constant.(diagm.((diag.(broadcast(x->x[],(Ref(M') .* dRs .* Ref(inv(M)')))))))
-            dX = sum((dRs .* adjoint.(Rs) .- adjoint.(Rs) .* dRs))
-            
-            bonddim = size(M[],1)
-            for i in 1:bonddim
-                d = zeros(bonddim)
-                d[i] = 1
-                s = M[] * diagm(d) * inv(M[])
-                dX[] -= dot(s,dX[])/dot(s,s)*s
+            y = _f(rv)
+
+            dXreg = Constant(y[1][] + (δ * αcache) .* rv[1][])
+            dXreg[][diagind(dXreg[])] .= 0
+            dDsreg = ntuple(k -> Constant(y[1+k][] + δ .* rv[1+k][]), dcomp)
+
+            yrv = RecursiveVec(dXreg, dDsreg...)
+
+            w = similar(v)
+            w[1:χ^2] .= vec(yrv[1][])
+            off = χ^2
+            for k in 1:dcomp
+                w[off+1:off+χ] .= diag(yrv[1+k][])
+                off += χ
             end
- 
-            RecursiveVec(dX, _dDs...)
+            return w
         end
+
+        # RHS is the current gradient
+        b = zeros(ComplexF64, n)
+        b[1:χ^2] .= vec(dX[])
+        off = χ^2
+        for k in 1:dcomp
+            b[off+1:off+χ] .= diag(dDs[k][])
+            off += χ
+        end
+
+        # build cached P_qr once
+        if P_qr === nothing
+            P = zeros(ComplexF64, n, n)
+            for i in 1:n
+                ei = zeros(ComplexF64, n)
+                ei[i] = 1.0
+                P[:, i] = Aplusreg(ei)
+            end
+            ϵ = 1e-10 * opnorm(P, 1)
+            @inbounds for i in 1:n
+                P[i,i] += ϵ
+            end
+            P_qr = qr(P)
+        end
+
+        bhat = P_qr \ b
         
-        m = reduce(hcat,map(1:vec_size) do i
-            b = zeros(vec_size)
-            b[i] = 1
-            unvectorize(linear_problem(vectorize(b)))
-        end)
+        dXsol = copy(reshape(view(bhat, 1:χ^2), χ, χ))
+
+        off = χ^2
+        dDs_sol = ntuple(k -> begin
+            dD = bhat[off+1:off+χ]
+            off += χ
+            Constant(diagm(dD))
+        end, dcomp)
+
+        preconditioned_gradient = (Constant(dXsol), dDs_sol)
+
+        return preconditioned_gradient
+    end
+
+    function precondition!(x, d)
+        # x = (ΨL, M, Minv, Ds, ρR, HL, E, e, hL)
+        _, M, Minv, Ds, ρR, _, _, _, _ = x
+        dX, dDs = d
+
+        χ = size(M[], 1)
+        dcomp = length(Ds)
+        n = χ^2 + dcomp*χ
+
+        # PSD-stabilized rhoR
+        U, S, _ = svd(ρR[])
+        ρRmat = U * Diagonal(S) * U'
+
+        EL = M'[] * M[]
+        ER = Minv[] * ρRmat * (Minv)'[]
+
+        # tangent mapping
+        function _f(rv)
+            _dX = rv[1]
+            _dDs = rv[2:end]
+
+            prec = [EL * (_dX[] * D[] - D[] * _dX[] + dD[]) * ER for (dD, D) in zip(_dDs, Ds)]
+
+            dX_mapped = Constant(sum([S * D'[] - D'[] * S for (S, D) in zip(prec, Ds)]))
+            dX_mapped[][diagind(dX_mapped[])] .= 0
+
+            dDs_mapped = Constant.(diagm.(diag.(prec)))
+            return RecursiveVec(dX_mapped, dDs_mapped...)
+        end
+
+        # (A + reg)(v) = _f(v) + reg(v), reg: δ on dDs, δ*α on dX
+        Aplusreg = function(v)
+            _dX = copy(reshape(view(v, 1:χ^2), χ, χ))
+            off = χ^2
+            _dDs = ntuple(k -> begin
+                dD = v[off+1:off+χ]
+                off += χ
+                Constant(diagm(dD))
+            end, dcomp)
+
+            rv = RecursiveVec(Constant(_dX), _dDs...)
+            
+            y = _f(rv)
+
+            dXreg = Constant(y[1][] + (δ * αcache) .* rv[1][])
+            dXreg[][diagind(dXreg[])] .= 0
+            dDsreg = ntuple(k -> Constant(y[1+k][] + δ .* rv[1+k][]), dcomp)
+
+            yrv = RecursiveVec(dXreg, dDsreg...)
+
+            w = similar(v)
+            w[1:χ^2] .= vec(yrv[1][])
+            off = χ^2
+            for k in 1:dcomp
+                w[off+1:off+χ] .= diag(yrv[1+k][])
+                off += χ
+            end
+            return w
+        end
+
+        # RHS is the current gradient
+        b = zeros(ComplexF64, n)
+        b[1:χ^2] .= vec(dX[])
+        off = χ^2
+        for k in 1:dcomp
+            b[off+1:off+χ] .= diag(dDs[k][])
+            off += χ
+        end
+
+        # build cached P_qr once
+        if P_qr === nothing
+            P = zeros(ComplexF64, n, n)
+            for i in 1:n
+                ei = zeros(ComplexF64, n)
+                ei[i] = 1.0
+                P[:, i] = Aplusreg(ei)
+            end
+            ϵ = 1e-10 * opnorm(P, 1)
+            @inbounds for i in 1:n
+                P[i,i] += ϵ
+            end
+            P_qr = qr(P)
+            x0_vec = nothing
+        end
+
+        Ahat = vec -> (P_qr \ Aplusreg(vec))
+        bhat = P_qr \ b
+
+        # better starting vector
+        x0 = x0_vec === nothing ? bhat : x0_vec
+
+        # tolerance heuristic (preconditioner solves can be loose)
+        tol = norm(bhat) * min(sqrt(max(δ, 1e-12)), 1e-3)
+
+        # one/two-step Krylov
+        dnew, info = KrylovKit.linsolve(Ahat, bhat, x0; maxiter=2, tol=tol, ishermitian=true, isposdef=true, verbosity=0)
+
+        # if cache stale, rebuild once
+        if norm(info.residual) > tol
+            @info "preconditioner: residual too large → rebuilding cached P"
+            P_qr = nothing
+            return precondition_full!(x, d)
+        end
+
+        x0_vec = dnew
         
-        # @show δ
-        dnew = vectorize((δ*one(m) + m)\unvectorize(dvec))
-        
+        dXsol = copy(reshape(view(dnew, 1:χ^2), χ, χ))
+
+        off = χ^2
+        dDs_sol = ntuple(k -> begin
+            dD = dnew[off+1:off+χ]
+            off += χ
+            Constant(diagm(dD))
+        end, dcomp)
+
+        preconditioned_gradient = (Constant(dXsol), dDs_sol)
+
+        return preconditioned_gradient
+    end
+
+    function precondition_minimal!(x,d)
+        _, M, Minv, Ds, ρR, = x
+        dX, dDs = d
+
+        U, S, _ = svd(ρR[])
+        ρRmat = U * Diagonal(S) * U'
+
+        EL =  M'[] * M[]
+        ER = Minv[] * ρRmat * (Minv)'[]
+
+        grad_v0 = RecursiveVec(dX, dDs...)
+
+        function _f(grad_v)
+            _dX = grad_v[1]
+            _dDs = grad_v[2:end]
+
+            prec = [EL * (_dX[] * D[] - D[] * _dX[] + dD[]) * ER for (dD, D) in zip(_dDs, Ds)] 
+
+            dX_mapped = Constant(sum([S * D'[] - D'[] * S for (S, D) in zip(prec, Ds)]))
+            dX_mapped[][diagind(dX_mapped[])] .= 0 # remove diagonal part of dX, which corresponds to gauge transformations that do not change the energy
+
+            dDs_mapped = Constant.(diagm.((diag.(prec))))
+
+            return RecursiveVec(dX_mapped, dDs_mapped...)
+        end
+
+        dnew,_ = linsolve(_f, grad_v0, grad_v0, linalg, δ)
+
         preconditioned_gradient = (dnew[1],dnew[2:end])
         return preconditioned_gradient
     end
 
     function fg(x)
-        (ΨL, M, Ds, ρR, HL, E, e, hL) = x
+        ΨL, M, Minv, _, ρR, HL, E,  = x
 
         gradQ, gradRs = gradient(H, (ΨL, one(ρR), ρR), HL, zero(HL); kwargs...)
 
-        Q = ΨL.Q
         Rs = ΨL.Rs
+        dRs = map((R, gradR) -> gradR - R * gradQ, Rs, gradRs)
 
-        dRs = .-(Rs) .* Ref(gradQ) .+ gradRs
+        dDs = map(dR -> M'[] * dR[] * Minv'[], dRs)
+        dDs = 2 .* Constant.(diagm.((diag.(dDs))))
 
-        dDs = Constant.(diagm.((diag.(broadcast(x->x[],(Ref(M') .* dRs .* Ref(inv(M)')))))))
+        dX = 2 * sum(map((dR, R) -> M' * (dR * R' - R' * dR) * Minv', dRs, Rs))
 
-        dX = sum((dRs .* adjoint.(Rs) .- adjoint.(Rs) .* dRs))
-        
-        bonddim = size(M[],1)
-        for i in 1:bonddim
-            d = zeros(bonddim)
-            d[i] = 1
-            s = M[] * diagm(d) * inv(M[])
-            dX[] -= dot(s,dX[])/dot(s,s)*s
-        end
+        dX[][diagind(dX[])] .= 0 
 
         return E, (dX, dDs)
     end
@@ -874,31 +1039,39 @@ function groundstate_MDMinv(H::LocalHamiltonian, Ψ₀::UniformCMPS;
     end
 
     function _finalize!(x, E, d, numiter)
-        normgrad2 = real(inner(x, d, d))
-        δ = max(1e-12, 1e-2*normgrad2)
-        return finalize!(x, E, d, numiter)
+        αcache = abs(E)^(1/3)
+        dX, dDs = d
+        dX_scaled = αcache^(-3) * dX
+        dDs_scaled = αcache^(-2.5) .* dDs
+        d_scaled = (dX_scaled, dDs_scaled...)
+        δ = max(1e-12, norm(d_scaled)^2)
+
+        _, _, _, _, ρR, _, E, = x
+        println("finalize: δ = $(δ), α = $(αcache), cond number = $(cond(ρR[]))")
+        return x, E, d, numiter
     end
 
     ΨL₀ = Ψ₀
     M = Constant(eigvecs(ΨL₀.Rs[1][]))
-    D1 = diagm(diag((inv(M[]) * ΨL₀.Rs[1][] * M[])))
-    D2 = diagm(diag((inv(M[]) * ΨL₀.Rs[2][] * M[])))
+    Minv = Constant(inv(M[]))
+    D1 = diagm(diag(Minv[] * ΨL₀.Rs[1][] * M[]))
+    D2 = diagm(diag(Minv[] * ΨL₀.Rs[2][] * M[]))
     Ds = Constant.((D1,D2))
     ρR, _, infoR = rightenv(ΨL₀; kwargs...)
     ρL = one(ρR)
     rmul!(ρR, 1/tr(ρR[]))
     HL, E, e, hL, infoL = leftenv(H, (ΨL₀,ρL,ρR); kwargs...)
-    x = (ΨL₀, M, Ds, ρR, HL, E, e, hL)
+    x = (ΨL₀, M, Minv, Ds, ρR, HL, E, e, hL)
 
     x, E, normgrad, numfg, history =
     optimize(fg, x, optalg; retract = retract,
                             finalize! = _finalize!,
-                            precondition = precondition!,
+                            # precondition = precondition!,
                             inner = inner, transport! = transport!,
                             scale! = scale!, add! = add!,
                             isometrictransport = true)
 
-    (ΨL, M, Ds, ρR, HL, E, e, hL) = x
+    (ΨL, M, Minv, Ds, ρR, HL, E, e, hL) = x
     return ΨL, ρR, E, e, normgrad, numfg, history
 end
 
@@ -909,7 +1082,6 @@ function groundstate_diagonal(H::LocalHamiltonian, Ψ₀::UniformCMPS;
                         finalize! = OptimKit._finalize!,
                         kwargs...)
 
-    δ = 1e-3
     function retract(x, d, α)
         Ψ, ρL, ρR, = x
         Q = Ψ.Q
@@ -956,7 +1128,7 @@ function groundstate_diagonal(H::LocalHamiltonian, Ψ₀::UniformCMPS;
     end
 
     function fg(x)
-        (Ψ, ρL, ρR, HL, HR, E, e, hL, hR) = x
+        Ψ, ρL, ρR, HL, HR, E, _, _, _ = x
 
         gradQ, gradRs = gradient(H, (Ψ, ρL, ρR), HL, HR; kwargs...)
 
@@ -982,12 +1154,6 @@ function groundstate_diagonal(H::LocalHamiltonian, Ψ₀::UniformCMPS;
         end
         return d1
     end
-    function _finalize!(x, E, d, numiter)
-        normgrad2 = real(inner(x, d, d))
-        @show normgrad2
-        δ = max(1e-12, 1e-3*normgrad2)
-        return finalize!(x, E, d, numiter)
-    end
 
     ρL, ρR, λ, infoR = environments!(Ψ₀; kwargs...)
 
@@ -996,7 +1162,6 @@ function groundstate_diagonal(H::LocalHamiltonian, Ψ₀::UniformCMPS;
     x = (Ψ₀, ρL, ρR, HL, HR, E, e, hL, hR)
 
     x, E, normgrad, numfg, history = optimize(fg, x, optalg; retract = retract,
-                                finalize! = _finalize!,
                                 inner = inner, transport! = transport!,
                                 scale! = scale!, add! = add!,
                                 isometrictransport = true)

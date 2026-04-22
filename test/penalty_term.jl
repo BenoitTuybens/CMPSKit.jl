@@ -8,15 +8,11 @@ using TensorOperations
 using Plots
 using LaTeXStrings
 
-χ = 32
+χ = 16
 k = 1.
-μ1 = 2.0
-μ2 = 2.0
-c1 = 1.0
-c2 = 1.0
-c12 = 0.0
-c21 = 0.0
-Λ = 1000.0
+μ = μ1 = μ2 = 0.0
+c = c1 = c2 = 10.0
+c12 = -1.5
 
 KL = Constant(randn(χ,χ))
 KL = 0.5*(KL-KL')
@@ -30,22 +26,17 @@ end
 #Put them in cMPS form
 Ψ = InfiniteCMPS(QL, RLs; gauge = :left)
 
-
-h = k * (∂ψ[1]'*∂ψ[1] + ∂ψ[2]'*∂ψ[2]) - μ1 * ψ[1]'*ψ[1] - μ2 * ψ[2]'*ψ[2] + c1 * (ψ[1]')^2*ψ[1]^2 + c2 * (ψ[2]')^2*ψ[2]^2 + c12 * ψ[1]'*ψ[2]'*ψ[2]*ψ[1] + c21 * ψ[2]'*ψ[1]'*ψ[1]*ψ[2] + Λ * ((ψ[1]*ψ[2] - ψ[2]*ψ[1])' * (ψ[1]*ψ[2] - ψ[2]*ψ[1]))
-H = ∫(h, (-Inf,+Inf))
-
 alg1 = LBFGS(; verbosity = 4, maxiter = 20000, gradtol = 1e-3);
-linalg = GMRES(krylovdim = 80; tol = 1e-5)
+linalg = GMRES(krylovdim = 80)
 
-Λs = [1.,1e1,1e2,1e3,1e4,1e5,1e6,1e7]
+Λs = [1e2,1e3,1e4,1e5,1e6,1e7]
 Es = []
 Ψs = []
 histories = []
 
 let Ψ = InfiniteCMPS(QL, RLs; gauge = :left)
     for Λi in Λs
-        Λ = Λi
-        h = k * (∂ψ[1]'*∂ψ[1] + ∂ψ[2]'*∂ψ[2]) - μ1 * ψ[1]'*ψ[1] - μ2 * ψ[2]'*ψ[2] + c1 * (ψ[1]')^2*ψ[1]^2 + c2 * (ψ[2]')^2*ψ[2]^2 + Λ * ((ψ[1]*ψ[2] - ψ[2]*ψ[1])' * (ψ[1]*ψ[2] - ψ[2]*ψ[1]))
+        h = k * (∂ψ[1]'*∂ψ[1] + ∂ψ[2]'*∂ψ[2]) - μ1 * ψ[1]'*ψ[1] - μ2 * ψ[2]'*ψ[2] + c1 * (ψ[1]')^2*ψ[1]^2 + c2 * (ψ[2]')^2*ψ[2]^2 + c12 * (ψ[1]'*ψ[2]'*ψ[2]*ψ[1] + ψ[2]'*ψ[1]'*ψ[1]*ψ[2]) + Λi * ((ψ[1]*ψ[2] - ψ[2]*ψ[1])' * (ψ[1]*ψ[2] - ψ[2]*ψ[1]))
         H = ∫(h, (-Inf,+Inf))
         # Ψ = InfiniteCMPS(QL, RLs; gauge = :left)
         Ψ, ρR, E, e, normgrad, numfg, history = groundstate(H, Ψ; optalg = alg1, linalg = linalg)
@@ -55,4 +46,4 @@ let Ψ = InfiniteCMPS(QL, RLs; gauge = :left)
     end
 end
 
-@save "data_D=$(χ)" Λs Es Ψs histories
+@save "data_mu=$(μ)_c=$(c)_c12=$(c12)_D=$(χ)" Λs Es Ψs histories
