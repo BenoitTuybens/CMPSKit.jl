@@ -750,107 +750,7 @@ function groundstate_MDMinv(H::LocalHamiltonian, Ψ₀::UniformCMPS;
         return s
     end
 
-    function precondition_full!(x, d)
-               # x = (ΨL, M, Minv, Ds, ρR, HL, E, e, hL)
-        _, M, Minv, Ds, ρR, _, _, _, _ = x
-        dX, dDs = d
-
-        χ = size(M[], 1)
-        dcomp = length(Ds)
-        n = χ^2 + dcomp*χ
-
-        # PSD-stabilized rhoR
-        U, S, _ = svd(ρR[])
-        ρRmat = U * Diagonal(S) * U'
-
-        EL = M'[] * M[]
-        ER = Minv[] * ρRmat * (Minv)'[]
-
-        # tangent mapping
-        function _f(rv)
-            _dX = rv[1]
-            _dDs = rv[2:end]
-
-            prec = [EL * (_dX[] * D[] - D[] * _dX[] + dD[]) * ER for (dD, D) in zip(_dDs, Ds)]
-
-            dX_mapped = Constant(sum([S * D'[] - D'[] * S for (S, D) in zip(prec, Ds)]))
-            dX_mapped[][diagind(dX_mapped[])] .= 0
-
-            dDs_mapped = Constant.(diagm.(diag.(prec)))
-            return RecursiveVec(dX_mapped, dDs_mapped...)
-        end
-
-        # (A + reg)(v) = _f(v) + reg(v), reg: δ on dDs, δ*α on dX
-        Aplusreg = function(v)
-            _dX = copy(reshape(view(v, 1:χ^2), χ, χ))
-            off = χ^2
-            _dDs = ntuple(k -> begin
-                dD = v[off+1:off+χ]
-                off += χ
-                Constant(diagm(dD))
-            end, dcomp)
-
-            rv = RecursiveVec(Constant(_dX), _dDs...)
-            
-            y = _f(rv)
-
-            dXreg = Constant(y[1][] + (δ * αcache) .* rv[1][])
-            dXreg[][diagind(dXreg[])] .= 0
-            dDsreg = ntuple(k -> Constant(y[1+k][] + δ .* rv[1+k][]), dcomp)
-
-            yrv = RecursiveVec(dXreg, dDsreg...)
-
-            w = similar(v)
-            w[1:χ^2] .= vec(yrv[1][])
-            off = χ^2
-            for k in 1:dcomp
-                w[off+1:off+χ] .= diag(yrv[1+k][])
-                off += χ
-            end
-            return w
-        end
-
-        # RHS is the current gradient
-        b = zeros(ComplexF64, n)
-        b[1:χ^2] .= vec(dX[])
-        off = χ^2
-        for k in 1:dcomp
-            b[off+1:off+χ] .= diag(dDs[k][])
-            off += χ
-        end
-
-        # build cached P_qr once
-        if P_qr === nothing
-            P = zeros(ComplexF64, n, n)
-            for i in 1:n
-                ei = zeros(ComplexF64, n)
-                ei[i] = 1.0
-                P[:, i] = Aplusreg(ei)
-            end
-            ϵ = 1e-10 * opnorm(P, 1)
-            @inbounds for i in 1:n
-                P[i,i] += ϵ
-            end
-            P_qr = qr(P)
-        end
-
-        bhat = P_qr \ b
-        
-        dXsol = copy(reshape(view(bhat, 1:χ^2), χ, χ))
-
-        off = χ^2
-        dDs_sol = ntuple(k -> begin
-            dD = bhat[off+1:off+χ]
-            off += χ
-            Constant(diagm(dD))
-        end, dcomp)
-
-        preconditioned_gradient = (Constant(dXsol), dDs_sol)
-
-        return preconditioned_gradient
-    end
-
-    function precondition!(x, d)
+    function precondition!(x, d; full::Bool=false)
         # x = (ΨL, M, Minv, Ds, ρR, HL, E, e, hL)
         _, M, Minv, Ds, ρR, _, _, _, _ = x
         dX, dDs = d
@@ -935,26 +835,40 @@ function groundstate_MDMinv(H::LocalHamiltonian, Ψ₀::UniformCMPS;
             x0_vec = nothing
         end
 
-        Ahat = vec -> (P_qr \ Aplusreg(vec))
         bhat = P_qr \ b
 
-        # better starting vector
-        x0 = x0_vec === nothing ? bhat : x0_vec
+        if full
+            dnew = bhat
+        else
+            Ahat = vec -> (P_qr \ Aplusreg(vec))
 
-        # tolerance heuristic (preconditioner solves can be loose)
-        tol = norm(bhat) * min(sqrt(max(δ, 1e-12)), 1e-3)
+            # better starting vector
+            x0 = x0_vec === nothing ? bhat : x0_vec
 
-        # one/two-step Krylov
-        dnew, info = KrylovKit.linsolve(Ahat, bhat, x0; maxiter=2, tol=tol, ishermitian=true, isposdef=true, verbosity=0)
+            # tolerance heuristic (preconditioner solves can be loose)
+            tol = norm(bhat) * min(sqrt(max(δ, 1e-12)), 1e-3)
 
-        # if cache stale, rebuild once
-        if norm(info.residual) > tol
-            @info "preconditioner: residual too large → rebuilding cached P"
-            P_qr = nothing
-            return precondition_full!(x, d)
+            # one/two-step Krylov
+            dnew, info = KrylovKit.linsolve(
+                Ahat,
+                bhat,
+                x0;
+                maxiter=2,
+                tol=tol,
+                ishermitian=true,
+                isposdef=true,
+                verbosity=0,
+            )
+
+            # if cache stale, rebuild once
+            if norm(info.residual) > tol
+                @info "preconditioner: residual too large → rebuilding cached P"
+                P_qr = nothing
+                return precondition!(x, d; full=true)
+            end
+
+            x0_vec = dnew
         end
-
-        x0_vec = dnew
         
         dXsol = copy(reshape(view(dnew, 1:χ^2), χ, χ))
 
@@ -967,38 +881,6 @@ function groundstate_MDMinv(H::LocalHamiltonian, Ψ₀::UniformCMPS;
 
         preconditioned_gradient = (Constant(dXsol), dDs_sol)
 
-        return preconditioned_gradient
-    end
-
-    function precondition_minimal!(x,d)
-        _, M, Minv, Ds, ρR, = x
-        dX, dDs = d
-
-        U, S, _ = svd(ρR[])
-        ρRmat = U * Diagonal(S) * U'
-
-        EL =  M'[] * M[]
-        ER = Minv[] * ρRmat * (Minv)'[]
-
-        grad_v0 = RecursiveVec(dX, dDs...)
-
-        function _f(grad_v)
-            _dX = grad_v[1]
-            _dDs = grad_v[2:end]
-
-            prec = [EL * (_dX[] * D[] - D[] * _dX[] + dD[]) * ER for (dD, D) in zip(_dDs, Ds)] 
-
-            dX_mapped = Constant(sum([S * D'[] - D'[] * S for (S, D) in zip(prec, Ds)]))
-            dX_mapped[][diagind(dX_mapped[])] .= 0 # remove diagonal part of dX, which corresponds to gauge transformations that do not change the energy
-
-            dDs_mapped = Constant.(diagm.((diag.(prec))))
-
-            return RecursiveVec(dX_mapped, dDs_mapped...)
-        end
-
-        dnew,_ = linsolve(_f, grad_v0, grad_v0, linalg, δ)
-
-        preconditioned_gradient = (dnew[1],dnew[2:end])
         return preconditioned_gradient
     end
 
@@ -1066,7 +948,7 @@ function groundstate_MDMinv(H::LocalHamiltonian, Ψ₀::UniformCMPS;
     x, E, normgrad, numfg, history =
     optimize(fg, x, optalg; retract = retract,
                             finalize! = _finalize!,
-                            # precondition = precondition!,
+                            precondition = precondition!,
                             inner = inner, transport! = transport!,
                             scale! = scale!, add! = add!,
                             isometrictransport = true)

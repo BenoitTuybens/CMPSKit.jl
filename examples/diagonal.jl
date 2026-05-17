@@ -8,10 +8,10 @@ using Random
 
 χ = 8
 k = 1.
-μ = μ1 = μ2 = 2.0
+μ = μ1 = μ2 = 1.0
 c = c1 = c2 = 1.0
 A1 = A2 = 0.0
-c12 = -0.5
+c12 = -0.0
 δμ = 0.00
 δA = 0.00
 sign1 = 1.0
@@ -87,9 +87,8 @@ Q = Constant(((inv(M[]) * Ψ.Q[] * M[])))
 Ψ, ρL, ρR, E, e, normgrad, numfg, history = groundstate_diagonal(H, Ψ; optalg = alg_prep, linalg = linalg)
 
 Ψ_new = leftgauge(Ψ)[1]
-push!(Ψ0s,Ψ_new)
 
-Ψ, ρR, E, e, normgrad, numfg, history = groundstate_MDMinv(H, Ψ0s[i]; optalg = alg1, linalg = linalg)
+Ψ, ρR, E, e, normgrad, numfg, history = groundstate_MDMinv(H, Ψ_new; optalg = alg1, linalg = linalg)
 
 @show E
 @show expval(h,Ψ)[]
